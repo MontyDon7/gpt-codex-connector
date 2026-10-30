@@ -1,0 +1,4 @@
+# Merge into ~/.codex/config.toml so Codex can call Claude Code as a tool.
+[mcp_servers.claude-code]
+command = "claude"
+args = ["mcp", "serve"]
