@@ -70,17 +70,17 @@ BUDGET_DEPARTMENTS = tuple(sorted(ENVELOPES_GBP))
 # FY2026 targets (kpis.md); actuals filled in as the simulation runs.
 KPIS: list[Kpi] = [
     Kpi("dso_days", "days", 45.0, None, False),                          # COMPANY.md §8
-    Kpi("bad_debt_pct", "percent", 1.0, None, False),                    # COMPANY.md §8 (< 1% of revenue)
-    Kpi("invoice_on_time_pct", "percent", 95.0, None, True),             # issued within 2 business days
-    Kpi("pricing_check_turnaround_days", "days", 2.0, None, False),
-    Kpi("month_end_close_working_days", "days", 5.0, None, False),
-    Kpi("collections_effectiveness_pct", "percent", 90.0, None, True),
-    Kpi("overdue_ar_pct", "percent", 15.0, None, False),
+    Kpi("invoice_timeliness_pct", "percent", 95.0, None, True),          # issued within 2 business days
+    Kpi("bad_debt_pct_revenue", "percent", 1.0, None, False),            # COMPANY.md §8 (< 1% of revenue)
+    Kpi("overdue_ar_over_60_pct", "percent", 8.0, None, False),
+    Kpi("collections_ladder_adherence_pct", "percent", 90.0, None, True),
+    Kpi("month_end_close_days", "days", 8.0, None, False),
     Kpi("forecast_accuracy_pct", "percent", 90.0, None, True),
     Kpi("cash_runway_months", "months", 18.0, None, True),
+    Kpi("gross_margin_pct", "percent", 48.0, None, True),                # COMPANY.md §5.1 FY2026
+    Kpi("ebitda_margin_pct", "percent", -25.0, None, True),              # COMPANY.md §5.1 FY2026
     Kpi("budget_variance_pct", "percent", 5.0, None, False),
-    Kpi("quoted_gross_margin_pct", "percent", 48.0, None, True),         # COMPANY.md §5.1 FY2026 gross margin
-    Kpi("billing_accuracy_pct", "percent", 99.0, None, True),
+    Kpi("pricing_check_sla_pct", "percent", 95.0, None, True),
 ]
 
 
@@ -121,7 +121,7 @@ class FinanceAgent(DepartmentAgent):
             "price_list": dict(PRICE_LIST_GBP), "proposals": {}, "schedules": {}, "invoices": {},
             "inv_seq": {}, "disputes": {}, "decisions": {}, "bookings_gbp": 0.0, "billed_net_ytd": 0.0,
             "collected_gross_ytd": 0.0, "bad_debt_gbp": 0.0, "credit_notes": 0, "invoices_raised": 0,
-            "on_time_invoices": 0, "pricing_checks": 0, "pricing_days_total": 0.0, "margin_sum": 0.0,
+            "on_time_invoices": 0, "pricing_checks": 0, "pricing_on_time": 0, "pricing_days_total": 0.0, "margin_sum": 0.0,
             "days_to_pay": [], "periods": {}, "close_queue": [], "cur_month": None, "closes": 0,
             "budget_cycles": {}, "approved_budget": {}, "commitments": {}, "flagged": {}, "headcount": {},
             "contractors": {}, "vendors": {}, "forecast_errors": [], "crisis_mode": False, "series_a_booked": False,
@@ -306,6 +306,7 @@ class FinanceAgent(DepartmentAgent):
         turnaround = (self.clock.day + delay) - prop.get("requested_day", self.clock.day)
         prop["checked"] = True
         self.state["pricing_checks"] += 1
+        self.state["pricing_on_time"] += 1 if turnaround <= 1 else 0
         self.state["pricing_days_total"] += max(turnaround, 0)
         self.state["margin_sum"] += margin
         rationale = self._narrative(
@@ -531,10 +532,24 @@ class FinanceAgent(DepartmentAgent):
     def _on_milestone(self, msg: Message, body: dict) -> list[Message]:
         sched = self._find_schedule(body)
         if sched is None:
+            # No signed-contract schedule on file: bill the accepted milestone from the message itself (so cash is
+            # not delayed) on an ad-hoc one-line schedule, and raise a task to reconcile it with Legal.
             self.state["billing_exceptions"] += 1
-            self._task(f"Milestone accepted with no billing schedule ({_s(body.get('engagement_id'), msg.id)})",
+            ref = _s(_first(body, "engagement_id", "contract_id", "deal_id", default=msg.id))
+            self._task(f"Milestone accepted with no billing schedule ({ref}); invoiced ad hoc, confirm with Legal",
                        self.clock.day + 1, "high")
-            return []
+            amount = _num(_first(body, "invoice_amount_gbp", "amount_gbp", "net_gbp"))
+            if amount <= 0:
+                return []
+            label = _s(_first(body, "milestone", "milestone_name", default="milestone acceptance"))
+            sched = {"key": ref, "ids": self._ids(body), "product": self._product(body, amount), "total_net": amount,
+                     "country": _s(body.get("country"), "UK").upper(), "terms": int(_num(body.get("payment_terms_days"),
+                     PAYMENT_TERMS_DAYS)), "kind": "fixed", "months_billed": 0, "active": True, "po_number": body.get("po_number"),
+                     "po_required": bool(body.get("po_required")), "next_bill_day": None, "adhoc": True,
+                     "expenses_cap_gbp": round(amount * 0.05, 2), "renewal": False,
+                     "milestones": [{"idx": 0, "label": label, "pct": 100.0, "amount": amount,
+                                     "trigger": "milestone", "status": "open", "invoice_id": None}]}
+            self.state["schedules"][ref] = sched
         if sched["kind"] == "retainer":
             return []
         idx = self._milestone_index(sched, body)
@@ -850,9 +865,18 @@ class FinanceAgent(DepartmentAgent):
 
     def _on_requisition_opened(self, msg: Message, body: dict) -> list[Message]:
         dept = _s(_first(body, "department", "dept"), "unknown")
-        self._task(f"Confirm requisition {_s(body.get('requisition_id'), msg.id)} ({dept}) is within approved "
-                   "headcount budget", self.clock.day + 3)
-        return []
+        req = _s(body.get("requisition_id"), msg.id)
+        self._task(f"Confirm requisition {req} ({dept}) is within approved headcount budget", self.clock.day + 3)
+        # Finance budget check: respond to People with the hire request carrying the loaded-cost confirmation.
+        salary = _num(_first(body, "salary_gbp", "base_salary_gbp", "salary"))
+        plan = HEADCOUNT_PLAN.get(dept)
+        planned = plan[self._fy() - 1] if plan else None
+        within = planned is None or self.state["headcount"].get(dept, 0) < planned
+        return [self.emit("finance.hire_requested", {
+            "department": dept, "requisition_id": req, "role": _s(body.get("role"), "unspecified"),
+            "salary_gbp": salary, "annual_loaded_cost_gbp": round(salary * LOADED_COST_FACTOR, 2),
+            "within_budget": within, "year_end_headcount_plan": planned, "requested_by": "finance",
+            "justification": "finance budget check on opened requisition"}, recipient="people", reply_to=msg.id)]
 
     def _on_headcount_approved(self, msg: Message, body: dict) -> list[Message]:
         dept = _s(_first(body, "department", "dept"), "unknown")
@@ -991,9 +1015,9 @@ class FinanceAgent(DepartmentAgent):
         wip = sum(m["amount"] for s in self.state["schedules"].values() if s["kind"] == "fixed" and s["active"]
                   for m in s["milestones"] if m["status"] == "open")
         exceptions = self.state["unapplied_cash_gbp"] > 0 or self.state["billing_exceptions"] > 0
-        days_to_close = 6 if exceptions else 5
+        days_to_close = 8 if exceptions else 7  # FY2026 target 8 (kpis.md)
         self.state["closes"] += 1
-        self._set_kpi("month_end_close_working_days", days_to_close)
+        self._set_kpi("month_end_close_days", days_to_close)
         out = [self.emit("finance.month_end_closed", {
             "period": period, "working_days_to_close": days_to_close, "revenue_recognised_gbp": round(p["billed_net"], 2),
             "billings_net_gbp": round(p["billed_net"], 2), "cash_collected_gbp": round(p["collected"], 2),
@@ -1064,12 +1088,12 @@ class FinanceAgent(DepartmentAgent):
         return out
 
     def _capacity_check(self) -> list[Message]:
-        """Finance volume check: request a Credit Controller once open ledger volume outgrows 2 humans."""
+        """Finance volume check: request a Billing and Collections Specialist once open ledger volume outgrows 2 humans."""
         open_count = sum(1 for i in self.state["invoices"].values() if i["status"] != "paid")
         if open_count >= 20 and not self.state["hire_requested"]:
             self.state["hire_requested"] = True
             return [self.emit("finance.hire_requested", {
-                "department": "finance", "role": "Credit Controller", "level": "consultant",
+                "department": "finance", "role": "Billing and Collections Specialist", "level": "consultant",
                 "salary_band_gbp": [55_000, 70_000], "justification": f"{open_count} open invoices; collections "
                 "and cash application exceed capacity of two humans plus agents", "requested_by": "finance",
                 "within_budget": True}, recipient="people")]
@@ -1082,22 +1106,21 @@ class FinanceAgent(DepartmentAgent):
         if dso is not None:
             self._set_kpi("dso_days", dso)
         if s["billed_net_ytd"] > 0:
-            self._set_kpi("bad_debt_pct", s["bad_debt_gbp"] / s["billed_net_ytd"] * 100)
+            self._set_kpi("bad_debt_pct_revenue", s["bad_debt_gbp"] / s["billed_net_ytd"] * 100)
         if s["invoices_raised"]:
-            self._set_kpi("invoice_on_time_pct", s["on_time_invoices"] / s["invoices_raised"] * 100)
-            self._set_kpi("billing_accuracy_pct", max(0.0, 100 - s["credit_notes"] / s["invoices_raised"] * 100))
-            open_gross = sum(i["gross"] - i["paid"] for i in s["invoices"].values() if i["status"] != "paid")
-            overdue = sum(i["gross"] - i["paid"] for i in s["invoices"].values()
-                          if i["status"] != "paid" and self.clock.day > i["due_day"])
+            self._set_kpi("invoice_timeliness_pct", s["on_time_invoices"] / s["invoices_raised"] * 100)
+            open_inv = [i for i in s["invoices"].values() if i["status"] != "paid"]
+            open_gross = sum(i["gross"] - i["paid"] for i in open_inv)
+            over60 = sum(i["gross"] - i["paid"] for i in open_inv if self.clock.day - i["issue_day"] > 60)
             if open_gross > 0:
-                self._set_kpi("overdue_ar_pct", overdue / open_gross * 100)
+                self._set_kpi("overdue_ar_over_60_pct", over60 / open_gross * 100)
             due = sum(i["gross"] for i in s["invoices"].values() if i["due_day"] <= self.clock.day)
             if due > 0:
                 paid_due = sum(i["paid"] for i in s["invoices"].values() if i["due_day"] <= self.clock.day)
-                self._set_kpi("collections_effectiveness_pct", min(100.0, paid_due / due * 100))
+                self._set_kpi("collections_ladder_adherence_pct", min(100.0, paid_due / due * 100))
         if s["pricing_checks"]:
-            self._set_kpi("pricing_check_turnaround_days", s["pricing_days_total"] / s["pricing_checks"])
-            self._set_kpi("quoted_gross_margin_pct", s["margin_sum"] / s["pricing_checks"])
+            self._set_kpi("pricing_check_sla_pct", s["pricing_on_time"] / s["pricing_checks"] * 100)
+            self._set_kpi("gross_margin_pct", s["margin_sum"] / s["pricing_checks"])  # quoted margin
         if s["forecast_errors"]:
             self._set_kpi("forecast_accuracy_pct", max(0.0, 100 - sum(s["forecast_errors"]) / len(s["forecast_errors"]) * 100))
         if s.get("runway_months") is not None:

@@ -6,18 +6,18 @@ Department: `finance` (FP&A, accounting, billing, collections, treasury, budgeti
 
 | KPI id | Name | Unit | FY2026 target | FY2027 target | FY2028 target | Direction | Frequency | Owner |
 |---|---|---|---|---|---|---|---|---|
-| dso_days | Days sales outstanding | days | 45 | 42 | 40 | lower is better | monthly | Credit Controller (Finance Analyst until hired); accountable: CFO |
-| invoice_timeliness_pct | Invoices issued within 2 business days of milestone acceptance | percent | 95 | 97 | 98 | higher is better | weekly | Billing and AR Lead |
+| dso_days | Days sales outstanding | days | 45 | 42 | 40 | lower is better | monthly | Billing and Collections Specialist (CFO until Q4 FY2026, then Finance Manager until hired in Q2 FY2027) |
+| invoice_timeliness_pct | Invoices issued within 2 business days of milestone acceptance | percent | 95 | 97 | 98 | higher is better | weekly | Billing and Collections Specialist (Finance Manager until hired) |
 | bad_debt_pct_revenue | Bad debt written off as share of revenue | percent | 1.0 | 0.8 | 0.6 | lower is better | quarterly | CFO |
-| overdue_ar_over_60_pct | Receivables more than 60 days past invoice date as share of open AR | percent | 8 | 6 | 5 | lower is better | weekly | Credit Controller |
-| collections_ladder_adherence_pct | Overdue invoices actioned on the due ladder day (day 31, 38, 45, 60) | percent | 90 | 95 | 97 | higher is better | weekly | Credit Controller |
-| month_end_close_days | Working days from month end to books closed | days | 8 | 6 | 5 | lower is better | monthly | Financial Controller (Finance Analyst until hired) |
-| forecast_accuracy_pct | Revenue forecast accuracy, next-quarter, 1 minus absolute percentage error | percent | 90 | 93 | 95 | higher is better | quarterly | FP&A Lead |
+| overdue_ar_over_60_pct | Receivables more than 60 days past invoice date as share of open AR | percent | 8 | 6 | 5 | lower is better | weekly | Billing and Collections Specialist |
+| collections_ladder_adherence_pct | Overdue invoices actioned on the due ladder day (day 31, 38, 45, 60) | percent | 90 | 95 | 97 | higher is better | weekly | Billing and Collections Specialist |
+| month_end_close_days | Working days from month end to books closed | days | 8 | 6 | 5 | lower is better | monthly | Finance Manager (Financial Controller from Q2 FY2028) |
+| forecast_accuracy_pct | Revenue forecast accuracy, next-quarter, 1 minus absolute percentage error | percent | 90 | 93 | 95 | higher is better | quarterly | Finance Manager |
 | cash_runway_months | Cash runway at trailing 3-month net burn (floor; no target for profitable months) | months | 18 | 24 | 24 | higher is better | monthly | CFO |
 | gross_margin_pct | Gross margin | percent | 48 | 58 | 64 | higher is better | monthly | CFO (with delivery and customer_success heads) |
 | ebitda_margin_pct | EBITDA margin | percent | -25 | 9 | 16 | higher is better | monthly | CFO |
-| budget_variance_pct | Absolute department-level budget variance, year to date | percent | 5 | 4 | 3 | lower is better | monthly | FP&A Lead |
-| pricing_check_sla_pct | Deals priced-checked within 1 business day of `sales.deal_approval_requested` or `sales.proposal_requested` | percent | 95 | 97 | 98 | higher is better | weekly | Pricing and Deal Desk Analyst (FinanceAgent drafts; human approves) |
+| budget_variance_pct | Absolute department-level budget variance, year to date | percent | 5 | 4 | 3 | lower is better | monthly | Finance Manager |
+| pricing_check_sla_pct | Deals priced-checked within 1 business day of `sales.deal_approval_requested` or `sales.proposal_requested` | percent | 95 | 97 | 98 | higher is better | weekly | Finance Manager (CFO until Q4 FY2026; FinanceAgent drafts, human approves) |
 
 Twelve KPIs. The FY2026 targets above are the values exposed in `agent.py` as `KPIS`. Units follow `core.Kpi`: percent values are plain numbers (45, not 0.45), days and months are plain numbers; `higher_is_better` is False for `dso_days`, `bad_debt_pct_revenue`, `overdue_ar_over_60_pct`, `month_end_close_days` and `budget_variance_pct`.
 
@@ -44,7 +44,7 @@ Guardrail: no KPI is reported as met if the underlying ledger period is still op
 
 | Cadence | Report | Audience | KPIs covered | Source system (modeled) |
 |---|---|---|---|---|
-| Weekly (Friday cut-off) | AR and collections dashboard | CFO, Credit Controller, CRO for named overdue accounts | invoice_timeliness_pct, overdue_ar_over_60_pct, collections_ladder_adherence_pct, pricing_check_sla_pct | Billing and AR sub-ledger; contract and milestone feed from `delivery.milestone_reached`, `legal.contract_signed` |
+| Weekly (Friday cut-off) | AR and collections dashboard | CFO, Billing and Collections Specialist, CRO for named overdue accounts | invoice_timeliness_pct, overdue_ar_over_60_pct, collections_ladder_adherence_pct, pricing_check_sla_pct | Billing and AR sub-ledger; contract and milestone feed from `delivery.milestone_reached`, `legal.contract_signed` |
 | Monthly (working day 8 in FY2026, then 6, then 5) | Management accounts pack | Executive team | dso_days, month_end_close_days, gross_margin_pct, ebitda_margin_pct, budget_variance_pct, cash_runway_months | General ledger (cloud accounting package), bank feeds, payroll journal from `people` |
 | Monthly (working day 10) | 13-week cash forecast refresh | CFO, CEO | cash_runway_months | Bank balances, AR ageing, AP run, payroll, VAT and PAYE quarterly dates; emits `finance.cash_forecast_updated` |
 | Quarterly (within 15 working days of quarter end) | Board finance report and rolling forecast | Board, Audit and Risk Committee (chair Marcus Ellery) | forecast_accuracy_pct, bad_debt_pct_revenue, all headline KPIs | Closed ledger, `data.kpi_report_published`, `executive.board_meeting_held` calendar |

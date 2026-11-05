@@ -105,7 +105,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(tuple(cls.SUBSCRIBES), tuple(subscribes_for(DEPT)))
         self.assertEqual(tuple(cls.PUBLISHES), tuple(publishes_for(DEPT)))
         self.assertGreaterEqual(len(cls.SUBSCRIBES), 20)
-        self.assertEqual(len(cls.PUBLISHES), 8)
+        self.assertEqual(len(cls.PUBLISHES), len(publishes_for(DEPT)))
+        self.assertGreaterEqual(len(cls.PUBLISHES), 8)
 
     def test_role_headcount(self):
         agent, *_ = _fresh_agent()

@@ -78,7 +78,7 @@ Loaded cost = average base salary x 1.28 (employer NI, pension, benefits, bonus 
 
 Year-end mix follows the staffing pyramid of `COMPANY.md §4` (Partner level including the head about 5%, Principal 10%, Manager 20%, Senior Consultant 30%, Consultant 25%, Analyst 10%). Colleague-owned `blueprint.md` role rows must sum to the same year-end totals; this build-up is the cost view of that mix.
 
-Why average base moves: FY2026 is a founding cohort hired at the upper end of each band; FY2027 hires enter at lower-to-mid band positions (average base falls about 5%); FY2028 adds a 3% merit round plus the US premium of +15% (`COMPANY.md §6.2`) on about 9 average US-based staff.
+Why average base moves: FY2026 is a founding cohort hired at the upper end of each band; FY2027 hires enter at lower-to-mid band positions (average base falls about 5%); FY2028 adds a 3% merit round plus the US premium of +15% (`COMPANY.md §6.2`) on the 12 New York hires of FY2028 (the same 12 of 58 FY2028 hires as `blueprint.md`), which average about 9 FTE over the year because they join through it.
 
 ### 2.4 AI agent cost (non-people, section 1 line 3)
 
@@ -220,7 +220,7 @@ The revenue plan in `COMPANY.md §5.1` therefore requires fixed fees, retainers 
 1. 225 available working days per FTE per year (260 less 25 days leave, 8 bank holidays, 2 training).
 2. Utilisation targets per `COMPANY.md §4`; Senior Consultant 75% and head 20% are assumptions derived so the blended figure stays at 70%.
 3. Average FTE is below year-end FTE because hiring runs through the year; average agents 4.0 / 14.0 / 37.0 against year-end 6 / 22 / 52.
-4. Loaded cost = base x 1.28 (`COMPANY.md §6.2`, §8). Base salaries stay inside the §6.2 bands; US hires +15%. About 9 average US-based staff in FY2028; a smaller number in FY2027 is absorbed in the FY2027 average base.
+4. Loaded cost = base x 1.28 (`COMPANY.md §6.2`, §8). Base salaries stay inside the §6.2 bands; US hires +15%. About 12 New York hires in FY2028 at base +15% (same as `blueprint.md`; about 9 time-weighted FTE); a smaller number in FY2027 is absorbed in the FY2027 average base.
 5. Agent cost per agent-year £30k / £27k / £24k inside the £20k to £35k range; model and compute unit cost falls about 15% a year (`COMPANY.md §8`).
 6. Subcontractor and associate day cost £900 blended; subcontractors used for peaks and niche skills, capped by the policy ceiling in section 1.
 7. Recruitment fees, onboarding, laptops and employer-brand cost sit in the `people` and `it_security` budgets, not here. Delivery bears only the productivity cost of vacancy and ramp (section 6).

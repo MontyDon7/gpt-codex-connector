@@ -36,9 +36,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-01: Pricing check on proposals
 
-**Owner:** Finance Manager, with the Finance agent as pricing desk. CFO is the escalation point.
-**Trigger:** `sales.proposal_requested` (sales asks for pricing support on a proposal) and `delivery.scoping_completed` (delivery has sized the work). Both are needed; the check runs when the second arrives, or on the first plus a 2 business day timer.
-**Inputs:** `proposal_id`, `deal_id`, `client_id`, `service_line`, `tier`, requested `amount_gbp`, requested discount, payment terms requested, delivery scoping (days by level, agent-days, expected subcontractors, expected expenses), price list (COMPANY.md §3), rate card (COMPANY.md §3.5), standard terms (COMPANY.md §7), approval limits (COMPANY.md §9.3).
+**Owner**: Finance Manager, with the Finance agent as pricing desk. CFO is the escalation point.
+**Trigger**: `sales.proposal_requested` (sales asks for pricing support on a proposal) and `delivery.scoping_completed` (delivery has sized the work). Both are needed; the check runs when the second arrives, or on the first plus a 2 business day timer.
+**Inputs**: `proposal_id`, `deal_id`, `client_id`, `service_line`, `tier`, requested `amount_gbp`, requested discount, payment terms requested, delivery scoping (days by level, agent-days, expected subcontractors, expected expenses), price list (COMPANY.md §3), rate card (COMPANY.md §3.5), standard terms (COMPANY.md §7), approval limits (COMPANY.md §9.3).
 
 ### Steps
 
@@ -72,9 +72,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-02: Deal desk, discounts and price changes
 
-**Owner:** CFO (Hannah Whitcombe).
-**Trigger:** `sales.deal_approval_requested` (deals >= £500k total contract value, or discount >10%, or non-standard terms), `executive.deal_decision_made` (the CEO or Board decision), `product.pricing_change_proposed` (a proposed list-price or packaging change), `executive.pricing_change_approved` (the approved change).
-**Inputs:** `deal_id`, `client_id`, `amount_gbp` (total contract value), discount, terms, concentration data (client revenue as % of forecast annual revenue), pricing check from SOP-FINANCE-01, price book version, current rate card.
+**Owner**: CFO (Hannah Whitcombe).
+**Trigger**: `sales.deal_approval_requested` (deals >= £500k total contract value, or discount >10%, or non-standard terms), `executive.deal_decision_made` (the CEO or Board decision), `product.pricing_change_proposed` (a proposed list-price or packaging change), `executive.pricing_change_approved` (the approved change).
+**Inputs**: `deal_id`, `client_id`, `amount_gbp` (total contract value), discount, terms, concentration data (client revenue as % of forecast annual revenue), pricing check from SOP-FINANCE-01, price book version, current rate card.
 
 ### Steps
 
@@ -108,9 +108,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-03: Contract to billing schedule
 
-**Owner:** Finance Manager.
-**Trigger:** `sales.deal_won` (open a customer record and credit check), `legal.contract_signed` (create the billing schedule), `delivery.engagement_kickoff` (confirm dates and activate the schedule).
-**Inputs:** `deal_id`, `contract_id`, `client_id`, `client_name`, `service_line`, `tier`, `amount_gbp`, signed contract and order form, client billing contact, PO number, VAT status, kickoff date and milestone plan from delivery.
+**Owner**: Finance Manager.
+**Trigger**: `sales.deal_won` (open a customer record and credit check), `legal.contract_signed` (create the billing schedule), `delivery.engagement_kickoff` (confirm dates and activate the schedule).
+**Inputs**: `deal_id`, `contract_id`, `client_id`, `client_name`, `service_line`, `tier`, `amount_gbp`, signed contract and order form, client billing contact, PO number, VAT status, kickoff date and milestone plan from delivery.
 
 ### Steps
 
@@ -144,9 +144,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-04: Milestone invoicing and revenue recognition
 
-**Owner:** Finance Manager.
-**Trigger:** `delivery.milestone_reached` (client has accepted a milestone; for Keep, the monthly invoice runs on a schedule on the 25th for the next month).
-**Inputs:** `engagement_id`, `milestone`, acceptance evidence (client sign-off email or acceptance certificate), billing schedule, `client_id`, percentage-complete from delivery, PO number, approved expenses.
+**Owner**: Finance Manager.
+**Trigger**: `delivery.milestone_reached` (client has accepted a milestone; for Keep, the monthly invoice runs on a schedule on the 25th for the next month).
+**Inputs**: `engagement_id`, `milestone`, acceptance evidence (client sign-off email or acceptance certificate), billing schedule, `client_id`, percentage-complete from delivery, PO number, approved expenses.
 
 ### Steps
 
@@ -180,9 +180,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-05: Change orders and engagement close-out
 
-**Owner:** Finance Manager.
-**Trigger:** `delivery.scope_change_requested` (change order at rate card; core work is fixed fee), `delivery.engagement_completed` (final milestone accepted, wrap-up).
-**Inputs:** `engagement_id`, `client_id`, change description, additional days by level, agent-days, rate card (COMPANY.md §3.5: Partner £2,400, Principal £1,800, Manager £1,400, Senior Consultant £1,050, Consultant £800, Analyst £550, AI agent-day £350), signed change order, final billing and cost position.
+**Owner**: Finance Manager.
+**Trigger**: `delivery.scope_change_requested` (change order at rate card; core work is fixed fee), `delivery.engagement_completed` (final milestone accepted, wrap-up).
+**Inputs**: `engagement_id`, `client_id`, change description, additional days by level, agent-days, rate card (COMPANY.md §3.5: Partner £2,400, Principal £1,800, Manager £1,400, Senior Consultant £1,050, Consultant £800, Analyst £550, AI agent-day £350), signed change order, final billing and cost position.
 
 ### Steps
 
@@ -216,9 +216,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-06: Cash application
 
-**Owner:** Finance Manager, with the Finance agent as cash-application agent.
-**Trigger:** `external.client_payment_received` (BACS/Faster Payments/CHAPS receipt, or bank-feed line from the bank).
-**Inputs:** bank transaction (date, amount, payer name, reference), open receivables ledger, remittance advice if any, `invoice_id` or reference text.
+**Owner**: Finance Manager, with the Finance agent as cash-application agent.
+**Trigger**: `external.client_payment_received` (BACS/Faster Payments/CHAPS receipt, or bank-feed line from the bank).
+**Inputs**: bank transaction (date, amount, payer name, reference), open receivables ledger, remittance advice if any, `invoice_id` or reference text.
 
 ### Steps
 
@@ -251,9 +251,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-07: Collections ladder
 
-**Owner:** CFO; the Finance agent runs the ageing daily as the collections agent.
-**Trigger:** daily schedule: the receivables ageing run at 07:00 UK time on every business day.
-**Inputs:** receivables ledger, due dates (invoice date + 30 days), dispute holds, customer success account notes, payment history, contact list for each client (billing contact, sponsor, CFO or finance director).
+**Owner**: CFO; the Finance agent runs the ageing daily as the collections agent.
+**Trigger**: daily schedule: the receivables ageing run at 07:00 UK time on every business day.
+**Inputs**: receivables ledger, due dates (invoice date + 30 days), dispute holds, customer success account notes, payment history, contact list for each client (billing contact, sponsor, CFO or finance director).
 
 ### Steps
 
@@ -288,9 +288,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-08: Disputes, credit notes and bad debt
 
-**Owner:** CFO.
-**Trigger:** `legal.client_dispute_raised` (a client contests an invoice, a deliverable or a contract term).
-**Inputs:** `client_id`, `engagement_id`, disputed invoice IDs and amounts, the nature of the dispute, legal's initial assessment, delivery's evidence, customer success's view of the relationship.
+**Owner**: CFO.
+**Trigger**: `legal.client_dispute_raised` (a client contests an invoice, a deliverable or a contract term).
+**Inputs**: `client_id`, `engagement_id`, disputed invoice IDs and amounts, the nature of the dispute, legal's initial assessment, delivery's evidence, customer success's view of the relationship.
 
 ### Steps
 
@@ -323,9 +323,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-09: Keep renewals, churn and revenue reversal
 
-**Owner:** Finance Manager.
-**Trigger:** `customer_success.renewal_due` (renewal window opens, typically 90 days before term end), `sales.renewal_proposal_sent` (proposal goes to the client), `customer_success.renewal_confirmed` (client renews), `customer_success.client_churned` (client leaves).
-**Inputs:** `client_id`, `contract_id`, current Keep tier and monthly fee (Essential £8,000, Plus £18,000, Enterprise £40,000), anniversary date, CPI at the time of renewal, payment history, usage and support days from delivery.
+**Owner**: Finance Manager.
+**Trigger**: `customer_success.renewal_due` (renewal window opens, typically 90 days before term end), `sales.renewal_proposal_sent` (proposal goes to the client), `customer_success.renewal_confirmed` (client renews), `customer_success.client_churned` (client leaves).
+**Inputs**: `client_id`, `contract_id`, current Keep tier and monthly fee (Essential £8,000, Plus £18,000, Enterprise £40,000), anniversary date, CPI at the time of renewal, payment history, usage and support days from delivery.
 
 ### Steps
 
@@ -359,9 +359,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-10: Month-end close
 
-**Owner:** CFO (Hannah Whitcombe), with the Finance Manager as close lead.
-**Trigger:** schedule: first working day of each month (WD1) starts the close for the prior month; target completion is WD6. Quarter-end and year-end add a VAT return and a statutory step.
-**Inputs:** bank statements, receivables and payables ledgers, billing schedules, delivery's percentage-of-completion estimates and timesheets, payroll journals, expense claims, supplier accruals, fixed-asset list, prior-period budget, accruals list from operations and procurement.
+**Owner**: CFO (Hannah Whitcombe), with the Finance Manager as close lead.
+**Trigger**: schedule: first working day of each month (WD1) starts the close for the prior month; target completion is WD6. Quarter-end and year-end add a VAT return and a statutory step.
+**Inputs**: bank statements, receivables and payables ledgers, billing schedules, delivery's percentage-of-completion estimates and timesheets, payroll journals, expense claims, supplier accruals, fixed-asset list, prior-period budget, accruals list from operations and procurement.
 
 ### Steps
 
@@ -401,9 +401,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-11: Cash forecast and treasury
 
-**Owner:** CFO; the Finance agent acts as treasury analyst.
-**Trigger:** weekly schedule on Monday morning; plus event triggers `data.forecast_updated` (new revenue and pipeline forecast from the data team), `delivery.capacity_forecast_updated` (staffing changes that move payroll and subcontractor spend), `data.kpi_report_published` (KPI refresh that moves collections assumptions), and ad hoc refreshes called by SOPs 02, 06, 08 and 09.
-**Inputs:** bank balances, 13-week receivables schedule by `due_day` and client payment behaviour, billing schedules (signature, mid-point, acceptance dates), payroll run, supplier payment run, tax calendar (PAYE 22nd, VAT quarterly, Corporation Tax), pipeline-weighted new business, funding events (seed £3.5m, Series A £10m in Q2 FY2026, COMPANY.md §1), capex.
+**Owner**: CFO; the Finance agent acts as treasury analyst.
+**Trigger**: weekly schedule on Monday morning; plus event triggers `data.forecast_updated` (new revenue and pipeline forecast from the data team), `delivery.capacity_forecast_updated` (staffing changes that move payroll and subcontractor spend), `data.kpi_report_published` (KPI refresh that moves collections assumptions), and ad hoc refreshes called by SOPs 02, 06, 08 and 09.
+**Inputs**: bank balances, 13-week receivables schedule by `due_day` and client payment behaviour, billing schedules (signature, mid-point, acceptance dates), payroll run, supplier payment run, tax calendar (PAYE 22nd, VAT quarterly, Corporation Tax), pipeline-weighted new business, funding events (seed £3.5m, Series A £10m in Q2 FY2026, COMPANY.md §1), capex.
 
 ### Steps
 
@@ -437,9 +437,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-12: Annual budget cycle
 
-**Owner:** CFO.
-**Trigger:** schedule: 1 October opens the cycle for the next fiscal year (calendar year), publishing `finance.budget_cycle_opened`. Every department's `<dept>.budget_submitted` (customer_success, data, delivery, executive, it_security, legal, marketing, operations, people, product, sales) triggers intake; `executive.budget_approved` closes the cycle.
-**Inputs:** COMPANY.md revenue and cost targets (§5.1 to §5.4), prior-year actuals, headcount plan (§6.1), salary bands (§6.2), department submissions (people cost from headcount x loaded cost = base x 1.28, non-people spend by line), strategy and OKRs.
+**Owner**: CFO.
+**Trigger**: schedule: 1 October opens the cycle for the next fiscal year (calendar year), publishing `finance.budget_cycle_opened`. Every department's `<dept>.budget_submitted` (customer_success, data, delivery, executive, it_security, legal, marketing, operations, people, product, sales) triggers intake; `executive.budget_approved` closes the cycle.
+**Inputs**: COMPANY.md revenue and cost targets (§5.1 to §5.4), prior-year actuals, headcount plan (§6.1), salary bands (§6.2), department submissions (people cost from headcount x loaded cost = base x 1.28, non-people spend by line), strategy and OKRs.
 
 ### Steps
 
@@ -476,9 +476,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-13: Headcount cost control and payroll
 
-**Owner:** Finance Manager; CFO approves anything outside approved budget.
-**Trigger:** `people.requisition_opened` (a requisition is raised and needs a finance check), `executive.headcount_approved` (the CEO has approved headcount outside the approved budget or confirmed an in-budget requisition), `people.offer_accepted` (a candidate has accepted at a salary), `people.new_hire_started` (starter joins payroll), `people.employee_left` (leaver, final pay and cost release), `people.contractor_engaged` (contractor or associate engaged).
-**Inputs:** `requisition_id`, `department`, role, level key, salary band (COMPANY.md §6.2), approved headcount plan (COMPANY.md §6.1), offer details (base salary, start date), leaver details (last working day, notice, holiday owed), contractor rate and term, IR35 status.
+**Owner**: Finance Manager; CFO approves anything outside approved budget.
+**Trigger**: `people.requisition_opened` (a requisition is raised and needs a finance check), `executive.headcount_approved` (the CEO has approved headcount outside the approved budget or confirmed an in-budget requisition), `people.offer_accepted` (a candidate has accepted at a salary), `people.new_hire_started` (starter joins payroll), `people.employee_left` (leaver, final pay and cost release), `people.contractor_engaged` (contractor or associate engaged).
+**Inputs**: `requisition_id`, `department`, role, level key, salary band (COMPANY.md §6.2), approved headcount plan (COMPANY.md §6.1), offer details (base salary, start date), leaver details (last working day, notice, holiday owed), contractor rate and term, IR35 status.
 
 ### Steps
 
@@ -515,9 +515,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-14: Vendor onboarding, procurement and supplier payments
 
-**Owner:** Finance Manager.
-**Trigger:** `operations.vendor_review_requested` (a new supplier is being reviewed), `it_security.vendor_risk_assessed` (security's assessment completed), `operations.vendor_approved` (vendor approved for use), `operations.procurement_order_placed` (a purchase order exists), `marketing.campaign_launched` (a campaign commits programme spend).
-**Inputs:** `vendor_id` (`VN-0001`), vendor details, quote, contract term, risk rating, PO value, budget line, supplier invoice, delivery or services-received confirmation, bank details form.
+**Owner**: Finance Manager.
+**Trigger**: `operations.vendor_review_requested` (a new supplier is being reviewed), `it_security.vendor_risk_assessed` (security's assessment completed), `operations.vendor_approved` (vendor approved for use), `operations.procurement_order_placed` (a purchase order exists), `marketing.campaign_launched` (a campaign commits programme spend).
+**Inputs**: `vendor_id` (`VN-0001`), vendor details, quote, contract term, risk rating, PO value, budget line, supplier invoice, delivery or services-received confirmation, bank details form.
 
 ### Steps
 
@@ -553,9 +553,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-15: Board reporting, strategy, OKRs and crisis response
 
-**Owner:** CFO.
-**Trigger:** `executive.board_meeting_held` (post-meeting actions and next-meeting preparation), `executive.okrs_set` (new OKRs affecting finance KPIs and targets), `executive.strategy_updated` (change to the strategy in COMPANY.md; needs financial model update), `executive.crisis_declared` (a company-wide crisis).
-**Inputs:** the latest close pack, cash forecast, budget, KPI pack, board minutes and actions, the strategy change, OKR targets, crisis description and severity.
+**Owner**: CFO.
+**Trigger**: `executive.board_meeting_held` (post-meeting actions and next-meeting preparation), `executive.okrs_set` (new OKRs affecting finance KPIs and targets), `executive.strategy_updated` (change to the strategy in COMPANY.md; needs financial model update), `executive.crisis_declared` (a company-wide crisis).
+**Inputs**: the latest close pack, cash forecast, budget, KPI pack, board minutes and actions, the strategy change, OKR targets, crisis description and severity.
 
 ### Steps
 
@@ -591,9 +591,9 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ## SOP-FINANCE-16: Finance capacity and hiring
 
-**Owner:** CFO.
-**Trigger:** quarterly schedule (first Monday of each quarter) and capacity-trigger breaches monitored by the agent.
-**Inputs:** invoice volume, supplier invoice volume, journals per month, close days, headcount plan for finance (2 humans and 2 agents in FY2026; 5 and 5 in FY2027; 10 and 9 in FY2028, COMPANY.md §6.1), error rates, audit and tax calendar, planned US entity launch (Q1 FY2027).
+**Owner**: CFO.
+**Trigger**: quarterly schedule (first Monday of each quarter) and capacity-trigger breaches monitored by the agent.
+**Inputs**: invoice volume, supplier invoice volume, journals per month, close days, headcount plan for finance (2 humans and 2 agents in FY2026; 5 and 5 in FY2027; 10 and 9 in FY2028, COMPANY.md §6.1), error rates, audit and tax calendar, planned US entity launch (Q1 FY2027).
 
 ### Steps
 

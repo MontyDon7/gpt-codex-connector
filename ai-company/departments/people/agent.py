@@ -83,15 +83,20 @@ REGULATION_KEYWORDS = ("employment", "working time", "holiday", "pay", "equality
 # FY2026 targets (must mirror kpis.md).
 KPIS = [
     Kpi("time_to_hire_days", "days", 45.0, None, higher_is_better=False),
-    Kpi("offer_acceptance_rate_pct", "percent", 85.0, None),
-    Kpi("annualised_attrition_pct", "percent", 14.0, None, higher_is_better=False),
-    Kpi("engagement_score", "score_out_of_100", 75.0, None),
-    Kpi("compliance_training_completion_pct", "percent", 98.0, None),
-    Kpi("day_one_readiness_pct", "percent", 95.0, None),
-    Kpi("cost_per_hire_gbp", "gbp", 7500.0, None, higher_is_better=False),
-    Kpi("leaver_access_revoked_24h_pct", "percent", 100.0, None),
-    Kpi("right_to_work_before_start_pct", "percent", 100.0, None),
-    Kpi("ai_hr_decisions_human_reviewed_pct", "percent", 100.0, None),
+    Kpi("offer_acceptance_rate", "percent", 80.0, None),
+    Kpi("attrition_rate_annualised", "percent", 14.0, None, higher_is_better=False),
+    Kpi("regretted_attrition_rate", "percent", 6.0, None, higher_is_better=False),
+    Kpi("cost_per_hire_gbp", "GBP", 2000.0, None, higher_is_better=False),
+    Kpi("onboarding_completion_rate", "percent", 95.0, None),
+    Kpi("day_one_readiness_rate", "percent", 95.0, None),
+    Kpi("engagement_score", "score", 72.0, None),
+    Kpi("compliance_training_completion", "percent", 98.0, None),
+    Kpi("performance_review_completion", "percent", 100.0, None),
+    Kpi("payroll_accuracy_rate", "percent", 99.5, None),
+    Kpi("human_oversight_coverage", "percent", 100.0, None),
+    Kpi("diverse_shortlist_rate", "percent", 70.0, None),
+    Kpi("hiring_plan_attainment", "percent", 100.0, None),
+    Kpi("people_cost_per_head_gbp", "GBP", 138000.0, None, higher_is_better=False),
 ]
 
 
@@ -171,7 +176,7 @@ class PeopleAgent(DepartmentAgent):
         }
         fn = routes.get(topic)
         if fn is None:
-            self.log_event("people.activity.unhandled_topic", f"no behaviour for {topic}", topic=topic)
+            self.log_event("people.activity.unhandled_topic", f"no behaviour for {topic}", source_topic=topic)
             return []
         return fn(message, body)
 
@@ -559,10 +564,9 @@ class PeopleAgent(DepartmentAgent):
         shortfall = needed - from_bench
         out: list[Message] = []
         if from_bench:
-            out.append(self.emit("people.internal.staffing_fulfilled", {
-                "engagement_id": eng, "fte_from_bench": from_bench, "remaining_shortfall_fte": shortfall,
-                "bench_fte_after": self.state["bench_fte"], "summary": f"{from_bench} FTE allocated from bench",
-            }, recipient=message.sender if message.sender in HEADCOUNT_PLAN else "delivery"))
+            self.log_event("people.activity.staffing_fulfilled", f"{from_bench} FTE allocated from bench for {eng}",
+                           engagement_id=eng, fte_from_bench=from_bench, remaining_shortfall_fte=shortfall,
+                           bench_fte_after=self.state["bench_fte"], requester=message.sender)
         if shortfall <= 0:
             self.create_task(f"Confirm bench allocation for {eng}", 2)
             return out
@@ -770,16 +774,14 @@ class PeopleAgent(DepartmentAgent):
         samples = m["time_to_hire_samples"]
         actual = {
             "time_to_hire_days": round(sum(samples) / len(samples), 1) if samples else None,
-            "offer_acceptance_rate_pct": _pct(m["offers_accepted"], m["offers_made"]),
-            "annualised_attrition_pct": _pct(m["voluntary_leavers"] * 365.0 / max(self.clock.day, 30),
+            "offer_acceptance_rate": _pct(m["offers_accepted"], m["offers_made"]),
+            "attrition_rate_annualised": _pct(m["voluntary_leavers"] * 365.0 / max(self.clock.day, 30),
                                              sum(HEADCOUNT_PLAN[d][self._year() - 1] for d in HEADCOUNT_PLAN)),
             "engagement_score": m["engagement_score"],
-            "compliance_training_completion_pct": _pct(m["training_completed"], m["training_assigned"]),
-            "day_one_readiness_pct": _pct(m["day_one_ready"], m["day_one_total"]),
+            "compliance_training_completion": _pct(m["training_completed"], m["training_assigned"]),
+            "day_one_readiness_rate": _pct(m["day_one_ready"], m["day_one_total"]),
             "cost_per_hire_gbp": round(m["recruiting_cost_gbp"] / m["hires"], 0) if m["hires"] else None,
-            "leaver_access_revoked_24h_pct": _pct(m["access_revoked_24h"], m["access_revoked_total"]),
-            "right_to_work_before_start_pct": _pct(m["rtw_before_start"], m["rtw_total"]),
-            "ai_hr_decisions_human_reviewed_pct": _pct(m["ai_decisions_reviewed"], m["ai_decisions"]),
+            "human_oversight_coverage": _pct(m["ai_decisions_reviewed"], m["ai_decisions"]),
         }
         return [replace(k, actual=actual.get(k.name)) for k in KPIS]
 

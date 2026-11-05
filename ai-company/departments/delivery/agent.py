@@ -85,7 +85,17 @@ INITIAL_ROSTER = {"partner": 1, "principal": 1, "manager": 2, "senior_consultant
                   "analyst": 1}
 INITIAL_AGENTS = 3
 
-MARGIN_FLOOR_PCT = 35.0             # engagement gross margin below which scoping flags a pricing risk
+# COMPANY.md §5.1 company gross margin targets; sops.md SOP-DELIVERY-01 uses them as the scoping floor
+MARGIN_FLOOR_BY_YEAR = {2026: 48.0, 2027: 58.0, 2028: 64.0}
+MARGIN_FLOOR_PCT = MARGIN_FLOOR_BY_YEAR[2026]
+# sops.md SOP-DELIVERY-05: plan health RAID rating (days overrun on plan; milestone slip in business days)
+RAID_AMBER_OVERRUN_PCT = 10.0
+RAID_RED_OVERRUN_PCT = 20.0
+RAID_RED_SLIP_BD = 5
+# sops.md SOP-DELIVERY-06: change-order approver split and goodwill cap (person-days per engagement)
+CHANGE_ORDER_PRINCIPAL_LIMIT_GBP = 25_000
+CHANGE_ORDER_MP_END_DATE_WEEKS = 4
+GOODWILL_CAP_PERSON_DAYS = 3
 SCOPING_DAYS = {"compass": 2, "forge": 4, "keep": 3}
 HIRE_LEAD_DAYS = 56                 # modelled time to fill a delivery role
 CONTRACTOR_LEAD_DAYS = 10           # modelled time to bring on a subcontractor
@@ -95,16 +105,18 @@ QUALITY_REMEDIATION_DAYS = {"low": 3, "medium": 7, "high": 10, "critical": 14}
 
 # FY2026 targets, mirrored in kpis.md. Names are the snake_case KPI ids.
 KPIS = [
-    Kpi("billable_utilisation_pct", "percent", 70.0, None),                 # COMPANY.md §4
-    Kpi("engagement_gross_margin_pct", "percent", 45.0, None),
-    Kpi("on_time_milestone_pct", "percent", 90.0, None),
-    Kpi("client_csat", "score_out_of_5", 4.4, None),
-    Kpi("qa_first_pass_rate_pct", "percent", 85.0, None),
-    Kpi("scope_change_capture_pct", "percent", 80.0, None),
-    Kpi("scoping_turnaround_days", "days", 3.0, None, False),
-    Kpi("time_to_staff_days", "days", 10.0, None, False),
-    Kpi("ai_agent_leverage_ratio", "agents_per_human", 0.5, None),          # COMPANY.md §2
-    Kpi("quality_issues_per_engagement", "count", 0.3, None, False),
+    Kpi("billable_utilisation", "percent", 66.0, None),
+    Kpi("on_time_milestone_rate", "percent", 85.0, None),
+    Kpi("first_pass_qa_rate", "percent", 82.0, None),
+    Kpi("scope_change_rate", "percent", 30.0, None, False),
+    Kpi("client_csat", "score", 4.3, None),
+    Kpi("agent_leverage_ratio", "ratio", 0.43, None),
+    Kpi("delivery_gross_margin", "percent", 50.0, None),
+    Kpi("quality_escapes_per_engagement", "count", 0.5, None, False),
+    Kpi("time_to_staff_days", "business days", 10.0, None, False),
+    Kpi("keep_attach_rate", "percent", 70.0, None),
+    Kpi("delivery_attrition", "percent", 14.0, None, False),
+    Kpi("subcontractor_cost_ratio", "percent", 30.0, None, False),
 ]
 
 
@@ -356,8 +368,9 @@ class DeliveryAgent(DepartmentAgent):
                       "AI risk review needed before go-live"],
             "keep": ["Handover from build team to run team", "Incident cover hours match client expectation"],
         }[spec["line"]]
-        if plan["margin_pct"] < MARGIN_FLOOR_PCT:
-            risks.append(f"Modelled margin {plan['margin_pct']}% below {MARGIN_FLOOR_PCT}% floor")
+        floor = MARGIN_FLOOR_BY_YEAR.get(self.clock.date.year, MARGIN_FLOOR_PCT)
+        if plan["margin_pct"] < floor:
+            risks.append(f"Modelled margin {plan['margin_pct']}% below {floor}% floor")
         if shortfall:
             gaps = ", ".join(f"{lv} {gap} FTE" for lv, gap in shortfall.items())
             risks.append("Staffing shortfall: " + gaps)
@@ -378,7 +391,8 @@ class DeliveryAgent(DepartmentAgent):
             "team_fte": dict(team["fte"]), "ai_agents": team["agents"],
             "effort_human_days": plan["human_days"], "effort_agent_days": plan["agent_days"],
             "estimated_cost_gbp": plan["cost_gbp"], "estimated_margin_pct": plan["margin_pct"],
-            "margin_floor_breached": plan["margin_pct"] < MARGIN_FLOOR_PCT,
+            "margin_floor_breached": plan["margin_pct"] < MARGIN_FLOOR_BY_YEAR.get(self.clock.date.year,
+                                                                                    MARGIN_FLOOR_PCT),
             "staffing_shortfall_fte": shortfall, "earliest_start_offset_days": delay + lead_days,
             "risks": risks, "assumptions": ["Fixed fee; changes via signed change order at rate card",
                                            "Client SME time of 2 days per week",
@@ -532,14 +546,17 @@ class DeliveryAgent(DepartmentAgent):
         self.state["metrics"]["scope_requests"] += 1
         eng = self._find_engagement(body)
         desc = str(body.get("description") or body.get("summary") or "client scope request")
-        human_days = float(body.get("estimated_days") or min(40, 3 + len(desc) // 40))
+        # an unsized request is never assumed to fit inside the goodwill cap
+        human_days = float(body.get("estimated_days") or body.get("requested_days")
+                           or min(40, max(GOODWILL_CAP_PERSON_DAYS + 1, 3 + len(desc) // 40)))
         mix = {"manager": 0.2, "senior_consultant": 0.5, "consultant": 0.3}
-        agent_days = _round(human_days * 0.6)
+        agent_days = _round(float(body["agent_days"]) if body.get("agent_days") is not None
+                            else human_days * 0.6)
         value = sum(RATE_CARD_GBP[lv] * human_days * share for lv, share in mix.items())
         value += RATE_CARD_GBP["ai_agent_day"] * agent_days
         value = int(round(value, -1))
         fee = eng["fee_gbp"] if eng else 0
-        absorbable = human_days <= 2 or (fee and value < 0.02 * fee)
+        absorbable = human_days <= GOODWILL_CAP_PERSON_DAYS or (fee and value < 0.02 * fee)
         if absorbable:
             self.state["metrics"]["scope_converted"] += 1     # handled inside tolerance, no leakage
             self.log_event("delivery.activity.scope_absorbed",
@@ -563,6 +580,8 @@ class DeliveryAgent(DepartmentAgent):
             "service_line": eng["service_line"] if eng else None,
             "summary": desc[:200], "extra_human_days": human_days, "extra_agent_days": agent_days,
             "rate_basis": "rate card", "amount_gbp": value, "schedule_impact_days": impact,
+            "approver": ("MP" if value > CHANGE_ORDER_PRINCIPAL_LIMIT_GBP
+                         or impact > CHANGE_ORDER_MP_END_DATE_WEEKS * 7 else "Principal"),
             "requires_signature_before_work": True,
             "requested_by": body.get("requested_by", "client sponsor"),
             "urgency": body.get("urgency", "normal"),
@@ -850,6 +869,14 @@ class DeliveryAgent(DepartmentAgent):
             out += self._complete_milestone(eng, m)
         return out
 
+    def _raid_status(self, eng: dict, slip_days: int) -> str:
+        """green/amber/red per SOP-DELIVERY-05 (cost overrun on plan, or milestone slip beyond 5 BD)."""
+        duration = max(TIERS[eng["tier"]]["weeks"] * 7, 1)
+        overrun = eng["slipped_days"] / duration * 100
+        if overrun > RAID_RED_OVERRUN_PCT or slip_days > RAID_RED_SLIP_BD * 7 / 5:
+            return "red"
+        return "amber" if overrun > RAID_AMBER_OVERRUN_PCT else "green"
+
     def _complete_milestone(self, eng: dict, m: dict) -> list[Message]:
         day = self.clock.day
         m["done"] = True
@@ -867,7 +894,8 @@ class DeliveryAgent(DepartmentAgent):
             "service_line": eng["service_line"], "tier": eng["tier"], "milestone": m["name"],
             "milestone_no": m["no"], "billing_pct": m["pct"], "amount_gbp": amount,
             "invoice_trigger": m["billable"], "due_day": m["due"], "accepted_day": day,
-            "on_time": on_time, "qa_signed_off_by": "Manager or above", "qa_first_pass": first_pass,
+            "on_time": on_time, "status": self._raid_status(eng, day - m["due"]),
+            "qa_signed_off_by": "Manager or above", "qa_first_pass": first_pass,
             "summary": f"{m['name']} reached for {eng['id']}",
         })]
         last = not [x for x in eng["milestones"] if not x["done"]]
@@ -942,22 +970,23 @@ class DeliveryAgent(DepartmentAgent):
             return _round(sum(xs) / len(xs), 2) if xs else None
 
         engs = max(len(self.state["engagements"]), 1)
+        with_change = sum(1 for e in self.state["engagements"].values() if e["change_orders"])
         actuals = {
-            "billable_utilisation_pct": self._utilisation_pct() if humans else None,
-            "engagement_gross_margin_pct": avg(m["margins"]),
-            "on_time_milestone_pct": (_round(m["on_time"] / m["milestones"] * 100)
-                                      if m["milestones"] else None),
+            "billable_utilisation": self._utilisation_pct() if humans else None,
+            "on_time_milestone_rate": (_round(m["on_time"] / m["milestones"] * 100)
+                                       if m["milestones"] else None),
+            "first_pass_qa_rate": (_round(m["qa_first_pass"] / m["qa_checked"] * 100)
+                                   if m["qa_checked"] else None),
+            "scope_change_rate": (_round(with_change / len(self.state["engagements"]) * 100)
+                                  if self.state["engagements"] else None),
             "client_csat": avg(m["csat"]),
-            "qa_first_pass_rate_pct": (_round(m["qa_first_pass"] / m["qa_checked"] * 100)
-                                       if m["qa_checked"] else None),
-            "scope_change_capture_pct": (_round(m["scope_converted"] / m["scope_requests"] * 100)
-                                         if m["scope_requests"] else None),
-            "scoping_turnaround_days": avg(m["scoping_days"]),
-            "time_to_staff_days": avg(m["staffing_days"]),
-            "ai_agent_leverage_ratio": _round(max(self.state["agents"], self._agents_in_use()) / humans, 2)
+            "agent_leverage_ratio": _round(max(self.state["agents"], self._agents_in_use()) / humans, 2)
             if humans else None,
-            "quality_issues_per_engagement": (_round(m["quality_issues"] / engs, 2)
-                                              if self.state["engagements"] else None),
+            "delivery_gross_margin": avg(m["margins"]),
+            "quality_escapes_per_engagement": (_round(m["quality_issues"] / engs, 2)
+                                               if self.state["engagements"] else None),
+            "time_to_staff_days": avg(m["staffing_days"]),
+            # keep_attach_rate, delivery_attrition, subcontractor_cost_ratio: owned by finance/HR systems
         }
         return [dataclasses.replace(k, actual=actuals.get(k.name)) for k in KPIS]
 

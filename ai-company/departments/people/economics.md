@@ -8,7 +8,7 @@ Budget in £k, matching the `people` row of COMPANY.md §5.4.
 
 | Line (£k) | FY2026 | FY2027 | FY2028 |
 |---|---:|---:|---:|
-| **People cost (see section 2)** | 212 | 398 | 747 |
+| **People cost (COMPANY.md §5.4; build-up in section 2)** | 210 | 400 | 750 |
 | Recruitment agency and executive search fees | 40 | 128 | 380 |
 | Referral bonuses | 6 | 40 | 112 |
 | ATS, job boards and sourcing tools | 10 | 24 | 55 |
@@ -22,11 +22,9 @@ Budget in £k, matching the `people` row of COMPANY.md §5.4.
 | AI tooling and compute for people agents | 3 | 10 | 48 |
 | Culture, events and recognition | 2 | 6 | 25 |
 | **Non-people subtotal** | 100 | 300 | 1,100 |
-| **Total (modeled)** | 311.8 | 698.3 | 1,847.1 |
-| COMPANY.md §5.4 envelope | 310 | 700 | 1,850 |
-| Variance (modeled minus envelope) | +1.8 | -1.7 | -2.9 |
+| **Total (COMPANY.md §5.4 envelope)** | 310 | 700 | 1,850 |
 
-People cost is rounded to £0.1k in the total row; section 2 holds the build-up. Non-people lines are budgeted whole £k and sum exactly to the §5.4 non-people figures (100 / 300 / 1,100).
+The people-cost line and totals are the COMPANY.md §5.4 `people` row exactly (210 / 400 / 750 people; 100 / 300 / 1,100 non-people; 310 / 700 / 1,850 total). The section 2 role build-up models 209.2 / 400.6 / 751.2, each within £5k of the envelope (see section 5); the envelope figure is the budget of record. Non-people lines are budgeted whole £k and sum exactly to the §5.4 non-people figures (100 / 300 / 1,100).
 
 ### 1.1 Non-people lines explained
 
@@ -51,21 +49,21 @@ Loaded cost = base salary x 1.28 (COMPANY.md §5.2). Base salaries sit inside th
 
 | Role | Level key | Band (§6.2) | Base £ | Loaded £k | Avg FTE FY26 | FY27 | FY28 | Cost FY26 £k | FY27 £k | FY28 £k |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Chief People Officer | head | £140-200k | 145,000 | 185.6 | 1.00 | 1.00 | 1.00 | 185.6 | 185.6 | 185.6 |
-| People Partner | senior_consultant | £72-90k | 82,000 | 105.0 | 0.25 | 1.00 | 1.00 | 26.2 | 105.0 | 105.0 |
-| Talent Acquisition Specialist | consultant | £55-70k | 62,000 | 79.4 | 0.00 | 0.75 | 1.00 | 0.0 | 59.5 | 79.4 |
-| People Operations Specialist | consultant | £55-70k | 58,000 | 74.2 | 0.00 | 0.40 | 1.00 | 0.0 | 29.7 | 74.2 |
-| Learning and Culture Specialist | consultant | £55-70k | 58,000 | 74.2 | 0.00 | 0.25 | 1.00 | 0.0 | 18.6 | 74.2 |
-| Senior People Partner | senior_consultant | £72-90k | 84,000 | 107.5 | 0.00 | 0.00 | 0.65 | 0.0 | 0.0 | 69.9 |
-| Talent Acquisition Lead | manager | £92-115k | 98,000 | 125.4 | 0.00 | 0.00 | 0.65 | 0.0 | 0.0 | 81.5 |
-| Reward and Payroll Analyst | analyst | £38-48k | 46,000 | 58.9 | 0.00 | 0.00 | 0.50 | 0.0 | 0.0 | 29.4 |
-| Employee Relations Specialist | consultant | £55-70k | 66,000 | 84.5 | 0.00 | 0.00 | 0.40 | 0.0 | 0.0 | 33.8 |
-| People Analytics Associate | analyst | £38-48k | 44,000 | 56.3 | 0.00 | 0.00 | 0.25 | 0.0 | 0.0 | 14.1 |
-| **Total** | | | | | 1.25 | 3.40 | 7.45 | 211.8 | 398.3 | 747.1 |
+| Chief People Officer | head | £140-200k | 145,000 | 185.6 | 0.99 | 1.00 | 1.00 | 183.6 | 185.6 | 185.6 |
+| People Operations Specialist | consultant | £55-70k | 60,000 | 76.8 | 0.33 | 1.00 | 1.00 | 25.7 | 76.8 | 76.8 |
+| Talent Acquisition Partner | senior_consultant | £72-90k | 82,000 | 105.0 | 0.00 | 0.75 | 1.00 | 0.0 | 79.1 | 105.0 |
+| HR Business Partner | senior_consultant | £72-90k | 85,000 | 108.8 | 0.00 | 0.42 | 1.00 | 0.0 | 45.6 | 108.8 |
+| People Coordinator | analyst | £38-48k | 42,000 | 53.8 | 0.00 | 0.25 | 1.00 | 0.0 | 13.6 | 53.8 |
+| Recruiter | consultant | £55-70k | 62,000 | 79.4 | 0.00 | 0.00 | 0.75 | 0.0 | 0.0 | 59.6 |
+| People Operations Specialist (second) | consultant | £55-70k | 60,000 | 76.8 | 0.00 | 0.00 | 0.75 | 0.0 | 0.0 | 57.7 |
+| Learning and Culture Specialist | consultant | £55-70k | 62,000 | 79.4 | 0.00 | 0.00 | 0.50 | 0.0 | 0.0 | 39.9 |
+| US People Partner | senior_consultant | £72-90k (US +15%) | 92,000 | 117.8 | 0.00 | 0.00 | 0.42 | 0.0 | 0.0 | 49.2 |
+| Reward and People Analytics Associate | analyst | £38-48k | 46,000 | 58.9 | 0.00 | 0.00 | 0.25 | 0.0 | 0.0 | 14.8 |
+| **Total** | | | | | 1.32 | 3.42 | 7.67 | 209.2 | 400.6 | 751.2 |
 | COMPANY.md §5.4 people cost | | | | | | | | 210 | 400 | 750 |
 | Year-end headcount (humans) | | | | | 2 | 5 | 10 | | | |
 
-Check: year-end counts are 2 (CPO, People Partner), 5 (add Talent Acquisition Specialist, People Operations Specialist, Learning and Culture Specialist) and 10 (add Senior People Partner, Talent Acquisition Lead, Reward and Payroll Analyst, Employee Relations Specialist, People Analytics Associate). Each total above is within £5k of the §5.4 people cost. The CPO base of £145,000 is within the head band and below the executive-team midpoint because equity forms part of head packages (COMPANY.md §6.2).
+Check: year-end counts are 2 (CPO, People Operations Specialist), 5 (add Talent Acquisition Partner, HR Business Partner, People Coordinator) and 10 (add Recruiter, second People Operations Specialist, Learning and Culture Specialist, US People Partner, Reward and People Analytics Associate), matching blueprint.md sections 3 and 5 and COMPANY.md §6.1. Planning bases and start dates are those of blueprint.md. Each total above is within £5k of the §5.4 people cost.
 
 ## 3. Pricing and unit economics
 
@@ -90,7 +88,7 @@ Y1 assumes the company starts FY2026 with no People infrastructure and hires its
 
 ### 3.2 Cost per hire
 
-Cost per hire = (agency + referral + ATS and job boards + screening + Talent Acquisition staff cost + allocated recruiting time) / gross hires. Allocated recruiting time is 30% of CPO time in FY2026 and FY2028, and 30% of CPO and People Partner time in FY2027 (the People Partner supports hiring-manager calibration).
+Cost per hire = (agency + referral + ATS and job boards + screening + Talent Acquisition staff cost + allocated recruiting time) / gross hires. Allocated recruiting time is 30% of CPO time in FY2026 and FY2028, and 30% of CPO and Talent Acquisition Partner time in FY2027 (the Talent Acquisition Partner owns requisition-to-offer from 2027-04-01).
 
 | £k unless stated | FY2026 | FY2027 | FY2028 |
 |---|---:|---:|---:|
@@ -167,7 +165,7 @@ Onboarding and offboarding admin is absorbed within the People salary lines abov
 ## 4. Assumptions
 
 1. Loaded cost = base salary x 1.28 for employer NI, pension, benefits and bonus accrual (COMPANY.md §5.2, §8.5). All base salaries are inside the §6.2 band for the stated level; the CPO base of £145,000 is inside the head band of £140,000 to £200,000.
-2. Average FTE per role is the fraction of the year in seat: Y1 People Partner starts at the beginning of Q4 (0.25); FY2027 Talent Acquisition Specialist from the start of Q2 (0.75), People Operations Specialist from the start of Q3 (0.40, rounded), Learning and Culture Specialist from the start of Q4 (0.25); FY2028 hires between Q1 and Q4 as in the table. The blueprint hiring plan governs exact quarters; these fractions are a costing approximation.
+2. Average FTE per role is the fraction of the year in seat from the blueprint.md section 5 start dates (for example People Operations Specialist from 2026-09-01 = 0.33 of FY2026; Talent Acquisition Partner from 2027-04-01 = 0.75 of FY2027). Planning bases are those in blueprint.md section 3.
 3. The opening headcount at 1 January 2026 is treated as zero. Attrition (14% / 12.5% / 11%) is applied to average headcount; FY2027 is the midpoint of the 14% to 11% range in COMPANY.md §8.3. All leavers are backfilled.
 4. Time-to-hire is 45 days for humans and agent provisioning is 5 days (COMPANY.md §8.3). The revenue-at-risk figures in 3.3 are an upper bound because only some vacancies are billable delivery seats.
 5. Agency fee percentages (15% / 18% / 20%) and referral bonuses (£2.0k / £2.0k / £2.5k, paid after six-month probation) are modeled assumptions typical of UK professional-services hiring. Agency terms usually include a 3-month rebate; the model assumes 3% of agency spend is rebated and nets this against the fee figures, so none is shown separately.
@@ -184,11 +182,11 @@ COMPANY.md §5.4 `people` row (£k): people cost 210 / 400 / 750; non-people 100
 
 | £k | FY2026 | FY2027 | FY2028 |
 |---|---:|---:|---:|
-| Modeled people cost | 211.8 | 398.3 | 747.1 |
+| Modeled people cost | 209.2 | 400.6 | 751.2 |
 | Modeled non-people cost | 100 | 300 | 1,100 |
-| Modeled total | 311.8 | 698.3 | 1847.1 |
+| Modeled total | 309.2 | 700.6 | 1,851.2 |
 | §5.4 total | 310 | 700 | 1,850 |
-| Delta | +1.8 | -1.7 | -2.9 |
+| Delta | -0.8 | +0.6 | +1.2 |
 | Within £5k tolerance | yes | yes | yes |
 
 Headcount reconciliation to COMPANY.md §6.1: People humans 2 / 5 / 10 and agents 1 / 3 / 6, matching the role table in section 2 and the agent count in section 3.5. Share of the company total: People is 4.1% / 3.9% / 4.7% of the §5.2 total cost of 7.5 / 17.8 / 39.0m.

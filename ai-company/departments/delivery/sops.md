@@ -24,9 +24,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-01: Proposal scoping and estimation
 
-**Owner:** Principal on the opportunity (Manager for Spark/Pilot); drafting by the Agent. Approver of price floor: MP.
-**Trigger:** `sales.proposal_requested`.
-**Inputs:** `deal_id`, `client_id`, `client_name`, `service_line`, `tier` (as requested), `summary` of the client problem, requested `due_day`; discovery notes from the qualified lead; client systems landscape; any RFP text.
+**Owner**: Principal on the opportunity (Manager for Spark/Pilot); drafting by the Agent. Approver of price floor: MP.
+**Trigger**: `sales.proposal_requested`.
+**Inputs**: `deal_id`, `client_id`, `client_name`, `service_line`, `tier` (as requested), `summary` of the client problem, requested `due_day`; discovery notes from the qualified lead; client systems landscape; any RFP text.
 
 ### Steps
 1. [agent] Parse the request, create a scoping workspace keyed by `deal_id`, and pull comparable closed engagements (same tier, sector, systems) from the engagement library, with actual vs planned effort.
@@ -55,9 +55,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-02: Lead pre-shaping and demand signal
 
-**Owner:** Delivery Ops Lead.
-**Trigger:** `sales.lead_qualified`; also `data.forecast_updated`.
-**Inputs:** `lead_id`, `client_name`, `service_line`, indicative `tier`, qualification notes; the latest pipeline forecast from Data (probability-weighted proposals and wins by service line).
+**Owner**: Delivery Ops Lead.
+**Trigger**: `sales.lead_qualified`; also `data.forecast_updated`.
+**Inputs**: `lead_id`, `client_name`, `service_line`, indicative `tier`, qualification notes; the latest pipeline forecast from Data (probability-weighted proposals and wins by service line).
 
 ### Steps
 1. [agent] Log the qualified lead as a probability-weighted demand line (qualification to proposal 50%, proposal to win 30%; COMPANY.md §5.3) against the capacity model by service line and week.
@@ -79,9 +79,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-03: Staffing an engagement
 
-**Owner:** Delivery Ops Lead; approver: Principal and MP (for Partner/Principal allocation).
-**Trigger:** `sales.deal_won`.
-**Inputs:** `deal_id`, `client_id`, `client_name`, `service_line`, `tier`, `amount_gbp`, win notes; the approved scoping pack from SOP-DELIVERY-01; capacity forecast; skills matrix; client conflicts list.
+**Owner**: Delivery Ops Lead; approver: Principal and MP (for Partner/Principal allocation).
+**Trigger**: `sales.deal_won`.
+**Inputs**: `deal_id`, `client_id`, `client_name`, `service_line`, `tier`, `amount_gbp`, win notes; the approved scoping pack from SOP-DELIVERY-01; capacity forecast; skills matrix; client conflicts list.
 
 ### Steps
 1. [agent] Create the engagement record `EN-nnnn` linked to `deal_id` and `client_id`, with status `pending_contract`, and copy the scoping pack (team profile, days, risks).
@@ -106,9 +106,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-04: Engagement kickoff
 
-**Owner:** Engagement Manager; sponsor: Principal.
-**Trigger:** `legal.contract_signed` and `finance.billing_schedule_created` (both required; either alone only updates engagement state); `people.new_hire_started` marks a new joiner available for allocation.
-**Inputs:** `contract_id`, `engagement_id`, `client_id`, `amount_gbp`, signature date, billing schedule (30% on signature, 40% at mid-point milestone, 30% on acceptance for fixed-fee work; COMPANY.md §7), approved staffing plan, scoping pack.
+**Owner**: Engagement Manager; sponsor: Principal.
+**Trigger**: `legal.contract_signed` and `finance.billing_schedule_created` (both required; either alone only updates engagement state); `people.new_hire_started` marks a new joiner available for allocation.
+**Inputs**: `contract_id`, `engagement_id`, `client_id`, `amount_gbp`, signature date, billing schedule (30% on signature, 40% at mid-point milestone, 30% on acceptance for fixed-fee work; COMPANY.md §7), approved staffing plan, scoping pack.
 
 ### Steps
 1. [agent] On `legal.contract_signed`, set the engagement to `contract_signed` and attach contract terms that affect delivery: IP, data protection, acceptance criteria, liability cap, security schedule, key-person clause.
@@ -132,9 +132,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-05: Milestone delivery, QA gate and acceptance
 
-**Owner:** Engagement Manager; reviewer: Manager or above independent of the author; acceptor: client sponsor.
-**Trigger:** Weekly engagement review (Monday 10:00) and each milestone `due_day`.
-**Inputs:** engagement plan, deliverable drafts, agent outputs with run logs, acceptance criteria from the contract, weekly status data.
+**Owner**: Engagement Manager; reviewer: Manager or above independent of the author; acceptor: client sponsor.
+**Trigger**: Weekly engagement review (Monday 10:00) and each milestone `due_day`.
+**Inputs**: engagement plan, deliverable drafts, agent outputs with run logs, acceptance criteria from the contract, weekly status data.
 
 ### Steps
 1. [agent] Each Monday, compute plan health per engagement: percent complete versus plan, days burned versus budget, open RAID items, and agent run-success rate. Rate engagements green, amber (more than 10% days overrun on plan) or red (more than 20% or a milestone slipping beyond 5 BD).
@@ -159,9 +159,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-06: Scope change and change orders
 
-**Owner:** Engagement Manager; approver: Principal (up to £25,000), MP (above £25,000 or any change moving the end date by more than 4 weeks).
-**Trigger:** `external.client_scope_request`.
-**Inputs:** `engagement_id` or `client_id`, client request text, current plan, remaining budget and contingency, rate card (COMPANY.md §3.5).
+**Owner**: Engagement Manager; approver: Principal (up to £25,000), MP (above £25,000 or any change moving the end date by more than 4 weeks).
+**Trigger**: `external.client_scope_request`.
+**Inputs**: `engagement_id` or `client_id`, client request text, current plan, remaining budget and contingency, rate card (COMPANY.md §3.5).
 
 ### Steps
 1. [agent] Classify the request: clarification, in-scope refinement, change to the deliverable set, or new work; match against contract scope clauses and acceptance criteria.
@@ -185,9 +185,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-07: Quality monitoring and issue management
 
-**Owner:** QA Lead (human, manager level or above); remediation owner: Engagement Manager.
-**Trigger:** `data.agent_quality_report_published`; `customer_success.support_escalated`; `customer_success.feedback_received`.
-**Inputs:** agent quality report (accuracy, hallucination rate, task success, latency, drift) per engagement/agent; client support escalations; client feedback (CSAT, NPS comments); QA gate findings.
+**Owner**: QA Lead (human, manager level or above); remediation owner: Engagement Manager.
+**Trigger**: `data.agent_quality_report_published`; `customer_success.support_escalated`; `customer_success.feedback_received`.
+**Inputs**: agent quality report (accuracy, hallucination rate, task success, latency, drift) per engagement/agent; client support escalations; client feedback (CSAT, NPS comments); QA gate findings.
 
 ### Steps
 1. [agent] Ingest each trigger and map it to an engagement and, where relevant, a specific delivered agent or deliverable.
@@ -211,9 +211,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-08: Engagement close-out and handover to Keep
 
-**Owner:** Engagement Manager; sponsor: Principal; Keep handover: Customer Success manager.
-**Trigger:** final acceptance milestone reached; also `customer_success.renewal_confirmed` (a Keep retainer or renewal starting, which requires a delivery handover or capacity reservation).
-**Inputs:** final acceptance, outstanding RAID items, actual days and agent-days, margin actuals, client satisfaction score, agent register entries, runbooks.
+**Owner**: Engagement Manager; sponsor: Principal; Keep handover: Customer Success manager.
+**Trigger**: final acceptance milestone reached; also `customer_success.renewal_confirmed` (a Keep retainer or renewal starting, which requires a delivery handover or capacity reservation).
+**Inputs**: final acceptance, outstanding RAID items, actual days and agent-days, margin actuals, client satisfaction score, agent register entries, runbooks.
 
 ### Steps
 1. [human] EM completes the close-out checklist: all milestones accepted, change orders signed and billed, open defects resolved or contractually accepted, client data returned or deleted per contract, access revoked.
@@ -237,9 +237,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-09: Weekly capacity forecast and hiring trigger
 
-**Owner:** Delivery Ops Lead; approver: MP; hiring approval: CEO for headcount outside budget (COMPANY.md §9.3).
-**Trigger:** weekly schedule (Friday 12:00); `people.new_hire_started` (new capacity), `people.engagement_survey_completed` (retention and burnout signal), and `data.forecast_updated` (demand input from SOP-DELIVERY-02).
-**Inputs:** resource tool allocations, weighted pipeline demand, leave calendar, attrition forecast (14% in Y1 easing to 11% in Y3; COMPANY.md §8), time-to-hire of 45 days, survey results by team.
+**Owner**: Delivery Ops Lead; approver: MP; hiring approval: CEO for headcount outside budget (COMPANY.md §9.3).
+**Trigger**: weekly schedule (Friday 12:00); `people.new_hire_started` (new capacity), `people.engagement_survey_completed` (retention and burnout signal), and `data.forecast_updated` (demand input from SOP-DELIVERY-02).
+**Inputs**: resource tool allocations, weighted pipeline demand, leave calendar, attrition forecast (14% in Y1 easing to 11% in Y3; COMPANY.md §8), time-to-hire of 45 days, survey results by team.
 
 ### Steps
 1. [agent] Compute bookable capacity per level for the next 13 and 26 weeks, subtracting leave, training, bench and non-billable duties; compute utilisation versus the 70% blended target and by level.
@@ -264,16 +264,16 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-10: Client risk, churn and dispute response
 
-**Owner:** Principal of record for the client (MP for disputes and any client above 10% of revenue); partners: Customer Success, Legal.
-**Trigger:** `customer_success.churn_risk_flagged`; `customer_success.health_score_updated`; `legal.client_dispute_raised`.
-**Inputs:** health score and drivers, churn risk reason, open engagements and Keep agents for the client, quality issue log, financial position (invoices outstanding), contract and dispute notice.
+**Owner**: Principal of record for the client (MP for disputes and any client above 10% of revenue); partners: Customer Success, Legal.
+**Trigger**: `customer_success.churn_risk_flagged`; `customer_success.health_score_updated`; `legal.client_dispute_raised`.
+**Inputs**: health score and drivers, churn risk reason, open engagements and Keep agents for the client, quality issue log, financial position (invoices outstanding), contract and dispute notice.
 
 ### Steps
 1. [agent] Build a client risk brief: engagement status, milestone slippage, open quality issues (SOP-DELIVERY-07), recent scope changes, sponsor changes, delivery team stability and Keep SLA performance.
 2. [human] For a churn flag or a health score below 60, the Principal and EM hold a risk huddle with the Customer Success manager within 2 BD to agree root cause and owner.
 3. [human] For `legal.client_dispute_raised`, the MP and Legal agree in 1 BD that delivery will not communicate with the client on disputed matters other than through the agreed channel; EM compiles a factual chronology (plans, acceptances, change orders, defects, communications) within 3 BD.
 4. [agent] Draft the recovery or response plan options (additional senior time, re-baselined plan, agent remediation) with cost and margin impact; no concessions drafted as commitments.
-5. [human] Principal decides the remedial action within the limits set by COMPANY.md §9.3 (any discount above 10% or non-standard terms go to the Finance head and CEO). Goodwill days are capped at 5 person-days without MP approval.
+5. [human] Principal decides the remedial action within the limits set by COMPANY.md §9.3 (any discount above 10% or non-standard terms go to the Finance head and CEO). Goodwill days are capped at 3 person-days per engagement without Principal approval (same cap as SOP-DELIVERY-06).
 6. [human] EM runs the action plan with weekly checkpoints; Customer Success tracks the health score; the Agent updates the capacity impact.
 7. [agent] Record outcome and lessons; if the client is lost, trigger close-out of live work under SOP-DELIVERY-08.
 
@@ -292,9 +292,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-11: AI agent and platform capability adoption
 
-**Owner:** AI Delivery Lead (human, principal level, accountable for the agent library); MP approves exceptions.
-**Trigger:** `product.agent_capability_added`; `product.release_shipped`; `product.roadmap_published`; `data.benchmark_ready`.
-**Inputs:** release notes, capability description, roadmap, evaluation benchmarks for agent tasks, agent register, current engagement agent configurations.
+**Owner**: AI Delivery Lead (human, principal level, accountable for the agent library); MP approves exceptions.
+**Trigger**: `product.agent_capability_added`; `product.release_shipped`; `product.roadmap_published`; `data.benchmark_ready`.
+**Inputs**: release notes, capability description, roadmap, evaluation benchmarks for agent tasks, agent register, current engagement agent configurations.
 
 ### Steps
 1. [agent] Map the capability or release to current and planned engagements; list which engagement agents or Keep-managed agents could use it, and which are exposed to deprecations or behavior changes.
@@ -318,9 +318,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-12: Security incident on a client engagement
 
-**Owner:** Engagement Manager for the affected engagement; MP informed on high/critical; IT Security leads the incident.
-**Trigger:** `it_security.incident_detected`.
-**Inputs:** incident id, severity, affected systems, whether client data or client systems are involved, affected engagements and agents, current handling instructions from IT Security.
+**Owner**: Engagement Manager for the affected engagement; MP informed on high/critical; IT Security leads the incident.
+**Trigger**: `it_security.incident_detected`.
+**Inputs**: incident id, severity, affected systems, whether client data or client systems are involved, affected engagements and agents, current handling instructions from IT Security.
 
 ### Steps
 1. [agent] Match the incident to engagements, client systems, delivery staff and agents by systems and credentials involved, and list the affected clients with their contractual security and notification clauses.
@@ -345,9 +345,9 @@ Role shorthand used below: **MP** = Managing Partner, Delivery (Thackeray); **Pr
 
 ## SOP-DELIVERY-13: Annual budget, OKRs and strategy alignment
 
-**Owner:** Managing Partner, Delivery (Oliver Thackeray); preparer: Delivery Ops Lead with the Finance business partner.
-**Trigger:** `finance.budget_cycle_opened`; `executive.budget_approved`; `executive.okrs_set`; `executive.strategy_updated`; `executive.crisis_declared`.
-**Inputs:** the budget template; capacity forecast (SOP-DELIVERY-09); headcount plan; pipeline demand; agent compute costs; subcontractor plans; prior-year actuals; KPI definitions in `kpis.md`; the economics model in `economics.md`.
+**Owner**: Managing Partner, Delivery (Oliver Thackeray); preparer: Delivery Ops Lead with the Finance business partner.
+**Trigger**: `finance.budget_cycle_opened`; `executive.budget_approved`; `executive.okrs_set`; `executive.strategy_updated`; `executive.crisis_declared`.
+**Inputs**: the budget template; capacity forecast (SOP-DELIVERY-09); headcount plan; pipeline demand; agent compute costs; subcontractor plans; prior-year actuals; KPI definitions in `kpis.md`; the economics model in `economics.md`.
 
 ### Steps
 1. [agent] On `finance.budget_cycle_opened`, produce a draft department budget: people cost by level at average headcount and loaded cost (base x 1.28), AI compute and tooling, subcontractors and associates, T&E and other lines, tied to the demand forecast (COMPANY.md §5.4 and §6.1 are the envelope).
