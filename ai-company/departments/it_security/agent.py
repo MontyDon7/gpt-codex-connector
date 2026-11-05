@@ -413,7 +413,7 @@ class ItSecurityAgent(DepartmentAgent):
         self._task(f"{inc['id']}: validate classification, contain and run post-incident review "
                    f"(severity {sev})", self.clock.day + self._bday_offset(5), "critical" if sev == "critical" else "high")
         if inc["personal_data"] is True:
-            out.append(self._emit_breach(inc, delay=1))
+            out.append(self._emit_breach(inc))
         elif inc["personal_data"] == "unknown" and inc["client_id"]:
             self._task(f"{inc['id']}: establish within {BREACH_ASSESSMENT_HOURS} clock hours whether personal data "
                        "is involved (SOP-IT_SECURITY-02)", self.clock.day + 1, "high")
@@ -574,7 +574,7 @@ class ItSecurityAgent(DepartmentAgent):
                                        f"{inc['id']} no filing at {elapsed_h}h; CEO and General Counsel alerted",
                                        incident_id=inc["id"], hours_since_awareness=elapsed_h)
                         out.append(self._emit_breach(inc, update=f"no_filing_at_{int(elapsed_h)}h"))
-                    closure = inc["awareness_day"] + self._bday_offset(BREACH_CLOSURE_BDAYS) + 4
+                    closure = inc["awareness_day"] + 14   # 10 business days from containment
                     if day >= closure and inc["resolve_day"] is None:
                         inc["resolve_day"], inc["resolve_hours"] = day, max(inc["resolve_hours"], elapsed_h)
                         self.log_event("it_security.activity.breach_logged_not_notified",
@@ -645,7 +645,7 @@ class ItSecurityAgent(DepartmentAgent):
                 bundle.append(f"client_workspace:{ws}")
         return bundle, blocked, exceptions
 
-    def _provision(self, ident: str, body: dict, contractor: bool, delay: int) -> list[Message]:
+    def _provision(self, ident: str, body: dict, contractor: bool, delay: int, in_sla: bool = True) -> list[Message]:
         s = self.state
         dept = _s(_first(body, "department", default="operations")).lower()
         role = _s(_first(body, "role", "job_title", default="unspecified"))
@@ -671,8 +671,6 @@ class ItSecurityAgent(DepartmentAgent):
         mfa_ok = body.get("mfa_enrolled") is not False
         s["accounts"][ident] = {"department": dept, "role": role, "privileged": privileged, "mfa": mfa_ok,
                                 "device_compliant": device_ok, "contractor": contractor, "start_day": self.clock.day}
-        limit = CONTRACTOR_ACCESS_BDAYS if contractor else JOINER_ACCESS_SLA_BDAYS
-        in_sla = delay <= self._bday_offset(limit)
         s["provision_requests"] += 1
         s["provision_in_sla"] += 1 if in_sla else 0
         self._task(f"30-day access check with manager for {ident}", self.clock.day + ACCESS_CHECK_DAYS, "low")
@@ -705,7 +703,8 @@ class ItSecurityAgent(DepartmentAgent):
                        "background check); CISO escalation", self.clock.day + 1, "high")
             self.log_event("it_security.activity.contractor_access_held", f"{ident} held for review", contractor_id=ident)
             return []
-        return self._provision(ident, body, True, self._bday_offset(JOINER_ACCESS_SLA_BDAYS))
+        delay = self._bday_offset(JOINER_ACCESS_SLA_BDAYS)
+        return self._provision(ident, body, True, delay, delay <= self._bday_offset(CONTRACTOR_ACCESS_BDAYS))
 
     def _on_employee_left(self, msg: Message, body: dict) -> list[Message]:
         s = self.state
@@ -934,7 +933,7 @@ class ItSecurityAgent(DepartmentAgent):
         hint = _int(_first(body, "tier_hint", "tier", default=0), 0)
         return min(computed, hint) if hint in (1, 2, 3) else computed
 
-    def _on_vendor_review(self, msg: Message, body: dict) -> list[Message]:
+    def _on_vendor_review(self, msg: Message, body: dict, late: bool = False) -> list[Message]:
         s = self.state
         vid = _s(_first(body, "vendor_id", default=f"VN-{msg.id}"))
         name = _s(_first(body, "vendor_name", "vendor", default=vid))
@@ -967,7 +966,7 @@ class ItSecurityAgent(DepartmentAgent):
             if tier == 3 and not conditions:
                 rating = "low"
         deadline = _int(body.get("due_day"), done)
-        on_time = done <= deadline
+        on_time = done <= deadline and not late
         s["vendor_due"] += 1
         s["vendor_on_time"] += 1 if on_time else 0
         s["vendors"][vid] = {"name": name, "tier": tier, "decision": decision, "conditions": conditions,
@@ -986,20 +985,18 @@ class ItSecurityAgent(DepartmentAgent):
         vid = _s(_first(body, "vendor_id", default=f"VN-{msg.id}"))
         rec = s["vendors"].get(vid)
         if rec is None:
-            s["vendor_due"] += 1  # assessed after approval counts as a miss (kpis.md)
             self._task(f"{vid}: approved without security assessment; block go-live until assessed", self.clock.day, "critical")
-            fake = dict(body, vendor_id=vid)
-            out = self._on_vendor_review(msg, fake)
-            s["vendors"][vid]["on_time"] = False
+            out = self._on_vendor_review(msg, dict(body, vendor_id=vid), late=True)
             s["vendors"][vid]["approved"] = True
             return out
         rec["approved"] = True
-        unmet = [c for c in rec["conditions"] if not _truthy((body.get("conditions_met") or {}).get(c)
-                 if isinstance(body.get("conditions_met"), dict) else body.get("conditions_met") is True)]
+        met = body.get("conditions_met")
+        unmet = [] if met is True else [c for c in rec["conditions"] if not (isinstance(met, dict) and _truthy(met.get(c)))]
         rec["verified"] = not unmet
         due = self.clock.day + self._bday_offset(VENDOR_CONDITIONS_VERIFY_BDAYS)
         if unmet:
-            self._task(f"{vid}: {len(unmet)} onboarding conditions unmet; go-live blocked in the access system", due, "high")
+            self._task(f"{vid}: verify {len(unmet)} onboarding conditions; go-live blocked in the access system until cleared",
+                       due, "high")
         self.log_event("it_security.activity.vendor_conditions_checked", f"{vid}: {len(unmet)} unmet",
                        vendor_id=vid, unmet=len(unmet))
         return []
@@ -1056,16 +1053,18 @@ class ItSecurityAgent(DepartmentAgent):
 
     def _readiness(self, name: str) -> float:
         c = self.state["certs"][name]
+        if self.clock.day < c["start_day"]:
+            return 0.0
         last = c["milestones"][-1]["planned_day"]
-        span = max(1, last - c["start_day"])
-        base = max(0.0, min(100.0, (self.clock.day - c["start_day"]) / span * 100.0))
+        progress = (self.clock.day - c["start_day"]) / max(1, last - c["start_day"])
+        base = min(100.0, 25.0 + 100.0 * progress)
         late_vulns = sum(1 for v in self._open_crit_high() if self.clock.day > v["due_day"])
         penalty = min(12, 3 * late_vulns) + min(10, 2 * self._open_ncs())
         training = [t["rate"] for t in self.state["training"].values()]
         if training and min(training) < POLICY_ATTESTATION_TARGET_PCT:
             penalty += 4
         penalty += min(10, 5 * sum(1 for t in self.state["continuity_tests"].values() if t["rto_missed"]))
-        return round(max(0.0, base - penalty if base < 100 else 100.0 - penalty), 1)
+        return round(max(0.0, base - penalty), 1)
 
     def _next_milestone(self, c: dict) -> Optional[dict]:
         return next((m for m in c["milestones"] if m["done_day"] is None), None)
@@ -1074,13 +1073,13 @@ class ItSecurityAgent(DepartmentAgent):
         day = self.clock.day
         nxt = self._next_milestone(c)
         if nxt is None:
-            return "certified" if name != "soc2_type2" or True else "certified"
+            return "certified"
         if day < c["start_day"]:
             return "planned"
-        if nxt["missed"] or (nxt["planned_day"] - day <= READINESS_ALERT_DAYS and c["readiness"] < READINESS_ALERT_PCT):
+        left = nxt["planned_day"] - day
+        if nxt["missed"] or (left <= READINESS_ALERT_DAYS and c["readiness"] < READINESS_ALERT_PCT):
             return "at_risk"
-        if nxt["planned_day"] - day <= 60 and "audit" in nxt["name"].lower() or "verification" in nxt["name"].lower() \
-                and nxt["planned_day"] - day <= 60:
+        if left <= 60 and any(k in nxt["name"].lower() for k in ("audit", "verification")):
             return "audit_scheduled"
         return "in_progress"
 
@@ -1098,25 +1097,28 @@ class ItSecurityAgent(DepartmentAgent):
         for name, c in self.state["certs"].items():
             c["readiness"] = self._readiness(name)
             changed_to_certified = False
-            for m in c["milestones"]:
-                if m["done_day"] is not None or day < m["planned_day"]:
+            for i, m in enumerate(c["milestones"]):
+                if m["done_day"] is not None:
                     continue
-                if c["readiness"] >= m["required"] or (m["missed"] and c["readiness"] >= m["required"]):
+                if day < m["planned_day"]:
+                    break
+                if c["readiness"] >= m["required"]:
                     m["done_day"] = day
                     if not m["missed"]:
-                        self.state["ms_on_time"] += 1
                         self.state["ms_due"] += 1
+                        self.state["ms_on_time"] += 1
                     changed_to_certified = all(x["done_day"] is not None for x in c["milestones"])
                 else:
                     if not m["missed"]:
                         m["missed"] = True
                         self.state["ms_due"] += 1
-                        if name == "iso_27001":
-                            self._task(f"ISO 27001 milestone '{m['name']}' missed: CISO to notify the CEO (US launch gate)",
-                                       day, "critical")
-                        else:
-                            self._task(f"Certification milestone '{m['name']}' missed: replan with auditor", day, "high")
+                        who = "CISO to notify the CEO (US launch gate)" if name == "iso_27001" else "replan with auditor"
+                        self._task(f"Certification milestone '{m['name']}' missed: {who}", day,
+                                   "critical" if name == "iso_27001" else "high")
                     m["planned_day"] = day + MILESTONE_SLIP_DAYS
+                    for later in c["milestones"][i + 1:]:
+                        if later["done_day"] is None and later["planned_day"] <= m["planned_day"]:
+                            later["planned_day"] = m["planned_day"] + 14
                 break  # one milestone per tick per certification
             status = self._status_for(name, c)
             if status != c["status"] or monthly:
@@ -1334,7 +1336,7 @@ class ItSecurityAgent(DepartmentAgent):
         hist = s["crit_high_open_history"]
         if len(hist) >= 2 and all(n > OPEN_CRIT_HIGH_VULN_TRIGGER for n in hist[-2:]):
             triggers.append("open critical/high vulnerabilities above 15 for two consecutive months")
-        specialists = max(1, 1)
+        specialists = {1: 1, 2: 2, 3: 4}[self._fy()]   # humans doing first-line work (blueprint.md section 3)
         if s["alerts_month"] / specialists > ALERTS_PER_SPECIALIST_TRIGGER:
             triggers.append("alert queue above 150 per specialist")
         pending = [q for q in s["questionnaires"].values() if q["completed_day"] > self.clock.day]
