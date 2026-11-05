@@ -120,7 +120,7 @@ Topics are those in `core/topics.py` (CONVENTIONS section 7). The department pub
 | Board and investors | in | `external.board_request` | Board and investor requests entering the company |
 | All departments | out | `executive.strategy_updated`, `executive.okrs_set`, `executive.budget_approved`, `executive.crisis_declared` | Company-wide direction and crisis mobilisation |
 
-Refusals (declined headcount, pricing or budget requests) are sent as direct messages in the `executive.internal.*` namespace to the requesting department (see Topic requests in the lead report).
+Refusals are communicated without extra topics: a declined headcount request is published as `executive.headcount_approved` with `approved: false` and a reason; a declined pricing change becomes a task that returns it to the Product sponsor; an over-envelope budget is approved at the envelope with `status: approved_with_reductions`.
 
 ## 7. Risks and dependencies
 

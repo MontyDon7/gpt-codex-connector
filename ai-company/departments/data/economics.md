@@ -14,8 +14,8 @@ All figures are fictional modelled assumptions in GBP. Loaded cost per human = b
 | Non-people: external market data and benchmark feeds | 6 | 8 | 30 |
 | Non-people: training, certifications and conferences | 4 | 4 | 8 |
 | Non-people: privacy tooling (DPIA, retention automation), audit support | 0 | 0 | 7 |
-| **Non-people total** | **50** | **110** | **410** |
-| **Department total** | **140** | **360** | **1,410** |
+| **Non-people total** | 50 | 110 | 410 |
+| **Department total** | 140 | 360 | 1,410 |
 
 Non-people lines sum: FY2026 15+12+8+5+6+4+0 = 50; FY2027 58+20+12+8+8+4+0 = 110; FY2028 165+100+40+60+30+8+7 = 410. In the FY2028 column the observability line includes £20k observability and £40k governance, catalogue and lineage tooling (£60k).
 
@@ -66,7 +66,7 @@ The data department is an internal service: it has no price list and sells nothi
 | Department cost per active client (£) | 5,833 | 5,538 | 10,071 | 140k/24; 360k/65; 1,410k/140 |
 | Non-people cost per active client (£) | 2,083 | 1,692 | 2,929 | 50k/24; 110k/65; 410k/140 (KPI targets round to 2,100 / 1,700 / 2,900) |
 | Department cost per average company human (£) | 4,828 | 4,865 | 8,294 | 140k/29; 360k/74; 1,410k/170 |
-| Average AI agents in service (data) | 0.75 | 2.9 | 6.6 | Provisioning dates in `blueprint.md` §5 |
+| Average AI agents in service (data) | 0.75 | 2.9 | 6.6 | Provisioning dates in `blueprint.md` §5; FY2026 is 0.75 because the Metrics and KPI Reporting Agent runs at full cost only from Q2 (Series A close), with Q1 a pilot on Finance's warehouse allowance |
 | Fully loaded cost per data agent-year (£) | 20,000 | 20,000 | 25,000 | Agent compute line / average agents; inside the £20k to £35k range of COMPANY.md §5.2; unit costs fall about 15% a year (COMPANY.md §8.4) but scope grows |
 | Cost per monthly KPI report (£) | 1,167 | 3,000 | 11,750 | Assume 10% of department cost is spent on the monthly report: 0.1 x 140k / 12; 0.1 x 360k / 12; 0.1 x 1,410k / 12 (report scope grows with certified metrics and clients) |
 | Equivalent external cost of an agent-day (£) | 350 | 350 | 350 | AI agent-day rate, COMPANY.md §3.5 (for internal charge-back comparison only) |

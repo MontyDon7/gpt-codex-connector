@@ -210,7 +210,7 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-07: Customer security questionnaire and security review
 
-**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until then. Sales is the requester (Chief Revenue Officer, Rahul Mehta).
+**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until the hire starts. Sales is the requester (Chief Revenue Officer, Rahul Mehta).
 **Trigger**: `sales.security_review_requested` (body includes `deal_id`, `client_id`, `client_name`, `questionnaire_type`, `due_day`, `contract_value` (`amount_gbp`), `data_access_required`).
 **Inputs**: the client questionnaire (for example CAIQ, SIG Lite, bespoke spreadsheet, or a procurement portal), the answer library, current certificates (ISO 27001, Cyber Essentials Plus, later SOC 2 Type II), policies, penetration test summary, sub-processor list, data flow diagram for the proposed engagement.
 
@@ -239,7 +239,7 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-08: Third-party and AI vendor risk assessment
 
-**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until then. Operations (Chief Operating Officer Beatrice Moreau) requests; Finance and Legal consume the result.
+**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until the hire starts. Operations (Chief Operating Officer Beatrice Moreau) requests; Finance and Legal consume the result.
 **Trigger**: `operations.vendor_review_requested` (body includes `vendor_id`, `vendor_name`, `service`, `data_classes`, `annual_cost_gbp` (`amount_gbp`), `tier_hint`, `due_day`) and `operations.vendor_approved` (post-approval control verification).
 **Inputs**: vendor questionnaire and evidence pack (ISO 27001 certificate, SOC 2 report, penetration test summary, DPA, sub-processor list, data location, AI model training terms), Lumenhall data classification, existing vendor register.
 
@@ -268,7 +268,7 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-09: Certification and compliance programme
 
-**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until then.
+**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until the hire starts.
 **Trigger**: `legal.regulatory_change_noted`, `legal.policy_update_published`, `people.compliance_training_completed`, `operations.continuity_test_completed`. Scheduled: monthly certification status review; quarterly internal audit; annual management review.
 **Inputs**: ISMS scope and Statement of Applicability, risk register, control library mapped to ISO 27001:2022, Cyber Essentials Plus, SOC 2 Trust Services Criteria, UK GDPR and DPA 2018, internal audit plan, certification body calendar, training completion data, continuity test report, policy register.
 
@@ -358,7 +358,7 @@ Common conventions used in every SOP:
 ## SOP-IT_SECURITY-12: Security hiring request
 
 **Owner**: CISO. People (Chief People Officer Grace Adeyemi) runs recruitment; the CEO approves headcount outside the approved plan (COMPANY.md §9.3).
-**Trigger**: Schedule: monthly capacity review on the first working day, or an event: a capacity trigger is breached (open critical and high vulnerabilities above 15 for two consecutive months, alert queue above 150 per analyst, questionnaire backlog above 6 or over 5 business days old, access review overdue by 30 days, or an audit date at risk through resourcing).
+**Trigger**: Schedule: monthly capacity review on the first working day, or an event: a capacity trigger is breached (open critical and high vulnerabilities above 15 for two consecutive months, alert queue above 150 per specialist, questionnaire backlog above 6 or over 5 business days old, access review overdue by 30 days, or an audit date at risk through resourcing).
 **Inputs**: KPI dashboard, approved headcount plan (2 humans FY2026, 5 FY2027, 9 FY2028; COMPANY.md §6.1), current roles and levels (COMPANY.md §6.2), alert and ticket volumes, agent utilisation.
 
 ### Steps
@@ -373,7 +373,7 @@ Common conventions used in every SOP:
 - `it_security.hire_requested` (recipient `people`): `department` (`it_security`), `role`, `level`, `headcount` (int), `start_quarter`, `justification`, `trigger_metric`, `severity` (urgency), `budgeted` (bool).
 
 ### SLA and controls
-- Request raised within 5 business days of the trigger breach; People acknowledges within 2 business days; target time to fill 60 days for Analyst and GRC roles and 90 days for Engineer roles.
+- Request raised within 5 business days of the trigger breach; People acknowledges within 2 business days; target time to fill 60 days for Consultant, Analyst and GRC Lead roles and 90 days for the Senior Security Specialist (Engineering) and Security Engineering Lead roles.
 - Controls: requests cite the budgeted headcount plan; hires outside plan need CEO approval; separation of duties maintained during hiring cover (privileged access not given to temporary cover without vetting).
 
 ### Exceptions and escalation

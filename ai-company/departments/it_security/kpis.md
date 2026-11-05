@@ -6,20 +6,20 @@ Department: `it_security` (agent class `ItSecurityAgent`). Head: Chief Informati
 
 | KPI id | Name | Unit | FY2026 target | FY2027 target | FY2028 target | Direction | Frequency | Owner |
 |---|---|---|---|---|---|---|---|---|
-| critical_vuln_sla_pct | Critical/high vulnerabilities remediated within SLA | percent | 90 | 95 | 97 | Higher is better | Weekly | Security Engineer (reports to CISO) |
-| mttr_critical_incident_hours | Mean time to resolve critical/high incidents | hours | 8 | 6 | 4 | Lower is better | Monthly | Security Engineer / CISO |
-| access_provisioning_sla_pct | Joiner/mover access provisioned within SLA (1 working day) | percent | 95 | 97 | 98 | Higher is better | Weekly | IT and Identity Manager |
-| leaver_revocation_hours | Leaver access revoked, 95th percentile | hours | 4 | 2 | 1 | Lower is better | Monthly | IT and Identity Manager |
-| mfa_coverage_pct | Human accounts with phishing-resistant or app-based MFA | percent | 100 | 100 | 100 | Higher is better | Weekly | IT and Identity Manager |
-| agent_credential_compliance_pct | AI agents with named owner, scoped credential and rotation in date | percent | 100 | 100 | 100 | Higher is better | Weekly | CISO (register custodian) |
-| endpoint_patch_compliance_pct | Managed endpoints and servers within patch window | percent | 95 | 97 | 98 | Higher is better | Weekly | IT and Identity Manager |
-| security_training_completion_pct | Staff completing mandatory security training on time | percent | 95 | 97 | 98 | Higher is better | Monthly | CISO with People |
-| security_questionnaire_turnaround_days | Client security questionnaire turnaround, median | days | 3 | 2 | 2 | Lower is better | Monthly | Security and Compliance Analyst (AI-assisted) |
-| vendor_assessments_on_time_pct | New and renewing vendors risk-assessed before onboarding/renewal | percent | 90 | 95 | 98 | Higher is better | Monthly | Security and Compliance Analyst |
+| critical_vuln_sla_pct | Critical/high vulnerabilities remediated within SLA | percent | 90 | 95 | 97 | Higher is better | Weekly | Senior Security Specialist (Engineering) |
+| mttr_critical_incident_hours | Mean time to resolve critical/high incidents | hours | 8 | 6 | 4 | Lower is better | Monthly | Senior Security Specialist (Engineering) |
+| access_provisioning_sla_pct | Joiner/mover access provisioned within SLA (1 working day) | percent | 95 | 97 | 98 | Higher is better | Weekly | Security and IT Operations Specialist |
+| leaver_revocation_hours | Leaver access revoked, 95th percentile | hours | 4 | 2 | 1 | Lower is better | Monthly | Security and IT Operations Specialist |
+| mfa_coverage_pct | Human accounts with phishing-resistant or app-based MFA | percent | 100 | 100 | 100 | Higher is better | Weekly | Security and IT Operations Specialist |
+| agent_credential_compliance_pct | AI agents with named owner, scoped credential and rotation in date | percent | 100 | 100 | 100 | Higher is better | Weekly | CISO (register custodian), with Senior Security Specialist (Engineering) |
+| endpoint_patch_compliance_pct | Managed endpoints and servers within patch window | percent | 95 | 97 | 98 | Higher is better | Weekly | Security and IT Operations Specialist |
+| security_training_completion_pct | Staff completing mandatory security training on time | percent | 95 | 97 | 98 | Higher is better | Monthly | CISO with Chief People Officer |
+| security_questionnaire_turnaround_days | Client security questionnaire turnaround, median | days | 3 | 2 | 2 | Lower is better | Monthly | GRC Lead (AI-assisted) |
+| vendor_assessments_on_time_pct | New and renewing vendors risk-assessed before onboarding/renewal | percent | 90 | 95 | 98 | Higher is better | Monthly | GRC Lead |
 | certification_milestones_on_track_pct | Certification plan milestones delivered on schedule | percent | 90 | 90 | 90 | Higher is better | Monthly | CISO |
-| phishing_simulation_report_rate_pct | Phishing simulation: staff reporting the lure | percent | 50 | 60 | 70 | Higher is better | Quarterly | Security and Compliance Analyst |
+| phishing_simulation_report_rate_pct | Phishing simulation: staff reporting the lure | percent | 50 | 60 | 70 | Higher is better | Quarterly | Security and IT Operations Specialist |
 
-Twelve KPIs. `agent.py` exposes the FY2026 targets as `KPIS: list[core.Kpi]` under the same ids (units as above, direction mapped to `higher_is_better`).
+Owners use `blueprint.md` role titles. Until the Senior Security Specialist (Engineering) and GRC Lead start (Q2 FY2027), the CISO covers those owner roles. Twelve KPIs. `agent.py` exposes the FY2026 targets as `KPIS: list[core.Kpi]` under the same ids (units as above, direction mapped to `higher_is_better`).
 
 ## 2. Definitions and formulas
 
@@ -75,7 +75,7 @@ Data sources:
 | security_questionnaire_turnaround_days | Questionnaire tracker linked to `sales.security_review_requested` | Agent |
 | vendor_assessments_on_time_pct | Vendor risk register, procurement and contract calendar | Agent with Operations |
 | certification_milestones_on_track_pct | ISMS project plan and auditor correspondence | CISO, human-verified |
-| phishing_simulation_report_rate_pct | Phishing simulation platform | Security and Compliance Analyst |
+| phishing_simulation_report_rate_pct | Phishing simulation platform | GRC Lead |
 
 Integrity rules: KPI values calculated by the agent are spot-checked monthly by a human against source systems (10% sample); targets are set in the budget cycle and changed only with CISO approval and a dated note; any KPI missing data is reported as "no data", never as 100%.
 

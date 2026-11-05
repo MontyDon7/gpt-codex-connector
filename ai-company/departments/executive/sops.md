@@ -19,9 +19,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-01: Deal approval (£500k or more)
 
-**Owner:** Chief Executive Officer (Chief of Staff runs the decision desk).
-**Trigger:** `sales.deal_approval_requested`. `sales.proposal_sent` is watched: a proposal of £500k or more with no approval request after 3 business days creates a chase task.
-**Inputs:** `deal_id`, `client_id`, `client_name`, `amount_gbp` (total contract value), `tier`, `service_line`, optional `discount_pct`, `duration_months`, `gross_margin_pct`, `uncapped_liability`, `non_standard_terms`.
+**Owner**: Chief Executive Officer (Chief of Staff runs the decision desk).
+**Trigger**: `sales.deal_approval_requested`. `sales.proposal_sent` is watched: a proposal of £500k or more with no approval request after 3 business days creates a chase task.
+**Inputs**: `deal_id`, `client_id`, `client_name`, `amount_gbp` (total contract value), `tier`, `service_line`, optional `discount_pct`, `duration_months`, `gross_margin_pct`, `uncapped_liability`, `non_standard_terms`.
 
 ### Steps
 
@@ -53,9 +53,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-02: Board meetings and Board-level approvals
 
-**Owner:** Chief of Staff (Board and Investor Relations Manager from FY2027).
-**Trigger:** `external.board_request` (Board member, investor or Chair asks for a meeting, paper or decision); quarterly schedule (target 15 January, April, July and October).
-**Inputs:** request `kind` (`strategy_review`, `ad_hoc_meeting`, `information_request`, `investor_update`), `requested_by`, `agenda`, `notice_days`, optional `strategy_change`.
+**Owner**: Chief of Staff (Board and Investor Relations Manager from FY2027).
+**Trigger**: `external.board_request` (Board member, investor or Chair asks for a meeting, paper or decision); quarterly schedule (target 15 January, April, July and October).
+**Inputs**: request `kind` (`strategy_review`, `ad_hoc_meeting`, `information_request`, `investor_update`), `requested_by`, `agenda`, `notice_days`, optional `strategy_change`.
 
 ### Steps
 
@@ -87,9 +87,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-03: Headcount approval and executive hiring
 
-**Owner:** Chief Executive Officer (Chief of Staff validates in-plan requests).
-**Trigger:** `people.requisition_opened` (from any department, via People), and `people.hire_requested` (People's own requests come straight to the executive).
-**Inputs:** `requisition_id`, `department`, `role_title`, `level`, `replacement` (backfill flag), `in_budget`, `business_case`, `critical_role`.
+**Owner**: Chief Executive Officer (Chief of Staff validates in-plan requests).
+**Trigger**: `people.requisition_opened` (from any department, via People), and `people.hire_requested` (People's own requests come straight to the executive).
+**Inputs**: `requisition_id`, `department`, `role_title`, `level`, `replacement` (backfill flag), `in_budget`, `business_case`, `critical_role`.
 
 ### Steps
 
@@ -97,16 +97,15 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 2. [agent] Test against the plan: headcount adds allowed this year = the department's year-end headcount for the year minus the prior year (`COMPANY.md §6.1`); approvals already given this year are counted. Backfills are always in plan.
 3. [agent] Classify: in plan or backfill (basis `in_plan` or `backfill`); outside plan with a `business_case` (basis `business_case`, CEO decision, reported at the next Board); outside plan with no case (declined).
 4. [human] Chief of Staff validates in-plan requests (2 business days). CEO decides outside-plan requests (5 business days). Roles of head level or in the Executive department are referred to the Board for approval (`COMPANY.md §9.1`).
-5. [agent] Publish `executive.headcount_approved` for approvals. For refusals or deferrals, send a direct internal message to the requesting department (`executive.internal.headcount_declined`) with the reason.
+5. [agent] Publish `executive.headcount_approved` for approvals. For refusals or deferrals, publish the same topic with `approved: false`, `decision: "declined"` and the `reason`, so People and Finance close the requisition.
 6. [agent] For the executive department's own planned hires, emit `executive.hire_requested` after the budget is approved (SOP-EXECUTIVE-04).
 
 ### Outputs and messages
 
 | Topic | Recipient | Body keys |
 |---|---|---|
-| `executive.headcount_approved` | `*` (People, Finance) | `requisition_id`, `department`, `role_title`, `approved`, `basis`, `approver`, `fiscal_year`, `conditions`, `decided_day` |
+| `executive.headcount_approved` | `*` (People, Finance) | `requisition_id`, `department`, `role_title`, `approved`, `basis`, `approver`, `fiscal_year`, `conditions`, `decided_day` (refusals add `decision`, `reason`) |
 | `executive.hire_requested` | `people` | `requisition_id`, `department`, `role_title`, `level`, `justification`, `target_start_day`, `salary_band_gbp` |
-| `executive.internal.headcount_declined` | requesting department (direct) | `requisition_id`, `department`, `reason`, `decided_day` |
 
 ### SLA and controls
 
@@ -120,9 +119,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-04: Annual budget and OKR cycle
 
-**Owner:** Chief Executive Officer.
-**Trigger:** `finance.budget_cycle_opened` (Q4), `finance.budget_submitted` (Finance's own submission comes to the executive), `finance.budget_consolidated`.
-**Inputs:** `fiscal_year`, `budget_id` (`BUD-2026` format), department submissions, consolidated total, envelope guidance from `COMPANY.md §5.4`.
+**Owner**: Chief Executive Officer.
+**Trigger**: `finance.budget_cycle_opened` (Q4), `finance.budget_submitted` (Finance's own submission comes to the executive), `finance.budget_consolidated`.
+**Inputs**: `fiscal_year`, `budget_id` (`BUD-2026` format), department submissions, consolidated total, envelope guidance from `COMPANY.md §5.4`.
 
 ### Steps
 
@@ -154,9 +153,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-05: In-year performance and cash review
 
-**Owner:** Chief of Staff (CEO for decisions).
-**Trigger:** `finance.month_end_closed`, `finance.budget_variance_flagged`, `finance.cash_forecast_updated`, `data.kpi_report_published`, `data.forecast_updated`.
-**Inputs:** `revenue_gbp`, `ytd_revenue_gbp`, `ebitda_gbp`, `gross_margin_pct`, `variance_pct`, `department`, `runway_months`, `kpis`, forecast `delta_pct`.
+**Owner**: Chief of Staff (CEO for decisions).
+**Trigger**: `finance.month_end_closed`, `finance.budget_variance_flagged`, `finance.cash_forecast_updated`, `data.kpi_report_published`, `data.forecast_updated`.
+**Inputs**: `revenue_gbp`, `ytd_revenue_gbp`, `ebitda_gbp`, `gross_margin_pct`, `variance_pct`, `department`, `runway_months`, `kpis`, forecast `delta_pct`.
 
 ### Steps
 
@@ -185,9 +184,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-06: Crisis declaration and command
 
-**Owner:** Chief Executive Officer (commander); Chief of Staff (crisis secretary).
-**Trigger:** `it_security.incident_detected` (severity `critical`), `it_security.data_breach_confirmed`, `legal.regulator_notification_filed`, `marketing.brand_incident_raised` (severity `critical`); stand-down on `it_security.incident_resolved`. Also called from SOP-EXECUTIVE-05 (liquidity) and SOP-EXECUTIVE-08 (key-client loss).
-**Inputs:** `incident_id`, `severity`, `summary`, categories of data affected, `client_id`.
+**Owner**: Chief Executive Officer (commander); Chief of Staff (crisis secretary).
+**Trigger**: `it_security.incident_detected` (severity `critical`), `it_security.data_breach_confirmed`, `legal.regulator_notification_filed`, `marketing.brand_incident_raised` (severity `critical`); stand-down on `it_security.incident_resolved`. Also called from SOP-EXECUTIVE-05 (liquidity) and SOP-EXECUTIVE-08 (key-client loss).
+**Inputs**: `incident_id`, `severity`, `summary`, categories of data affected, `client_id`.
 
 ### Steps
 
@@ -218,14 +217,14 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-07: Strategy refresh and pricing governance
 
-**Owner:** Strategy and Transformation Lead.
-**Trigger:** `product.pricing_change_proposed`, `product.roadmap_published`, `legal.regulatory_change_noted`; quarterly strategy review.
-**Inputs:** `change_id`, `tier`, `service_line`, `old_price_gbp`, `new_price_gbp`, `margin_impact_pct`, `impact` (regulatory), roadmap items.
+**Owner**: Strategy and Transformation Lead.
+**Trigger**: `product.pricing_change_proposed`, `product.roadmap_published`, `legal.regulatory_change_noted`; quarterly strategy review.
+**Inputs**: `change_id`, `tier`, `service_line`, `old_price_gbp`, `new_price_gbp`, `margin_impact_pct`, `impact` (regulatory), roadmap items.
 
 ### Steps
 
 1. [agent] For a pricing proposal, compute the change percentage against the list price in `COMPANY.md §3` and check Finance's margin input.
-2. [agent] Approve changes of 15% or less in absolute terms with non-negative margin impact; effective date 30 days after approval. Larger or margin-negative changes are returned with a direct internal message (`executive.internal.pricing_change_declined`) and go to the Board if the sponsor insists.
+2. [agent] Approve changes of 15% or less in absolute terms with non-negative margin impact; effective date 30 days after approval. Larger or margin-negative changes are returned to the Product sponsor by a task (no topic is published) and go to the Board if the sponsor insists.
 3. [human] Strategy and Transformation Lead reviews against competitive data and the discount policy (typical discount 10% or less, `COMPANY.md §3`).
 4. [agent] Publish `executive.pricing_change_approved` for approvals (Finance, Sales, Marketing, Product update their systems).
 5. [agent] For `product.roadmap_published` and `legal.regulatory_change_noted`: log, create a review task for the next quarterly strategy review; strategic regulatory impact is added to the Board agenda.
@@ -249,9 +248,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-08: Key-client and commercial escalation
 
-**Owner:** Chief Executive Officer.
-**Trigger:** `customer_success.churn_risk_flagged`, `customer_success.client_churned`, `finance.collections_escalated`, `sales.deal_won`, `sales.deal_lost`, `legal.client_dispute_raised`, `delivery.quality_issue_raised`.
-**Inputs:** `client_id`, `client_name`, `annual_value_gbp` or `amount_gbp`, `severity`, `days_overdue`, `invoice_id`.
+**Owner**: Chief Executive Officer.
+**Trigger**: `customer_success.churn_risk_flagged`, `customer_success.client_churned`, `finance.collections_escalated`, `sales.deal_won`, `sales.deal_lost`, `legal.client_dispute_raised`, `delivery.quality_issue_raised`.
+**Inputs**: `client_id`, `client_name`, `annual_value_gbp` or `amount_gbp`, `severity`, `days_overdue`, `invoice_id`.
 
 ### Steps
 
@@ -281,9 +280,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-09: Contract exception approval
 
-**Owner:** Chief Executive Officer (with General Counsel).
-**Trigger:** `legal.contract_risk_flagged`.
-**Inputs:** `contract_id`, `deal_id`, `risk_level` (`low`, `medium`, `high`, `critical`), `issue`, optional `mitigation`, `amount_gbp`, `client_id`.
+**Owner**: Chief Executive Officer (with General Counsel).
+**Trigger**: `legal.contract_risk_flagged`.
+**Inputs**: `contract_id`, `deal_id`, `risk_level` (`low`, `medium`, `high`, `critical`), `issue`, optional `mitigation`, `amount_gbp`, `client_id`.
 
 ### Steps
 
@@ -308,9 +307,9 @@ Steps marked [human] are done by the named human; steps marked [agent] are done 
 
 ## SOP-EXECUTIVE-10: Governance, risk and assurance oversight
 
-**Owner:** Chief of Staff.
-**Trigger:** `legal.compliance_finding_raised`, `legal.ai_risk_review_completed`, `it_security.certification_status_updated`, `operations.continuity_test_completed`, `operations.process_improvement_proposed`, `data.agent_quality_report_published`, `delivery.capacity_forecast_updated`, `people.engagement_survey_completed`.
-**Inputs:** `severity`, `finding_id`, `outcome`, `certification`, `status`, `result`, `estimated_cost_gbp`, `shortfall_fte`, `utilisation_pct`, `engagement_score`, `quality_score`.
+**Owner**: Chief of Staff.
+**Trigger**: `legal.compliance_finding_raised`, `legal.ai_risk_review_completed`, `it_security.certification_status_updated`, `operations.continuity_test_completed`, `operations.process_improvement_proposed`, `data.agent_quality_report_published`, `delivery.capacity_forecast_updated`, `people.engagement_survey_completed`.
+**Inputs**: `severity`, `finding_id`, `outcome`, `certification`, `status`, `result`, `estimated_cost_gbp`, `shortfall_fte`, `utilisation_pct`, `engagement_score`, `quality_score`.
 
 ### Steps
 

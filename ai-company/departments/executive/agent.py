@@ -380,11 +380,11 @@ class ExecutiveAgent(DepartmentAgent):
         if reason:
             self.state["headcount_decisions"][req_id] = {"decision": "declined", "reason": reason}
             self._record("headcount_decision", req_id, "declined", department=dept, reason=reason)
-            recipient = m.sender if m.sender in DEPARTMENTS else "people"
-            return [self.emit("executive.internal.headcount_declined",
+            return [self.emit("executive.headcount_approved",
                               {"requisition_id": req_id, "department": dept, "role_title": role_title,
-                               "reason": reason, "decided_day": self.clock.day},
-                              recipient=recipient, reply_to=m.id)]
+                               "approved": False, "decision": "declined", "basis": "", "reason": reason,
+                               "approver": "Chief Executive Officer", "fiscal_year": fy, "conditions": [],
+                               "decided_day": self.clock.day}, reply_to=m.id)]
 
         board_route = dept == "executive" or level in ("head", "executive")
         approver = ("Board of Directors" if board_route else
@@ -737,11 +737,9 @@ class ExecutiveAgent(DepartmentAgent):
             reasons.append("negative_margin_impact")
         if reasons:
             self._record("pricing_decision", change_id, "declined", change_pct=round(pct, 1))
-            recipient = m.sender if m.sender in DEPARTMENTS else "product"
-            return [self.emit("executive.internal.pricing_change_declined",
-                              {"change_id": change_id, "tier": tier, "reasons": reasons,
-                               "change_pct": round(pct, 1), "decided_day": self.clock.day},
-                              recipient=recipient, reply_to=m.id)]
+            self.create_task(f"Return pricing change {change_id} to the Product sponsor: "
+                             f"{', '.join(reasons)}", 3, "medium")
+            return []
         out = {
             "change_id": change_id, "tier": tier, "service_line": _text(b, "service_line", tier.split("_")[0]),
             "old_price_gbp": int(old), "new_price_gbp": int(round(new)), "change_pct": round(pct, 1),
