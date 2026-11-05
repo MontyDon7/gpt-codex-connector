@@ -1,0 +1,846 @@
+"""Customer Success department agent (Chief Customer Officer's desk).
+
+Owns client health scoring, onboarding handover, Keep support triage, renewals, churn prevention and
+post-mortems, expansion signalling, case-study eligibility and the department budget submission.
+All logic is deterministic and works offline with ``core.MockLLM``. See sops.md for the procedures
+this module implements (SOP-CUSTOMER_SUCCESS-01 to -14).
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Callable, Optional
+
+from core import DepartmentAgent, Kpi, Message, Role, publishes_for, subscribes_for
+
+# ---------------------------------------------------------------------------------------------
+# KPIs (FY2026 targets, mirrors kpis.md section 1)
+# ---------------------------------------------------------------------------------------------
+KPIS: list[Kpi] = [
+    Kpi("net_revenue_retention", "percent", 100.0, None),            # floor FY2026; 115 FY2027 (COMPANY.md §5.1)
+    Kpi("gross_revenue_retention", "percent", 90.0, None),
+    Kpi("logo_retention", "percent", 83.0, None),                    # COMPANY.md §5.1 planning rate
+    Kpi("nps", "points", 40.0, None),
+    Kpi("csat", "percent", 90.0, None),
+    Kpi("avg_health_score", "points", 72.0, None),
+    Kpi("green_client_share", "percent", 60.0, None),
+    Kpi("keep_attach_forge_build_scale", "percent", 75.0, None),     # COMPANY.md §2 land and expand
+    Kpi("keep_attach_compass_programme", "percent", 40.0, None),     # COMPANY.md §2 (>=40%)
+    Kpi("support_first_response_sla", "percent", 95.0, None),
+    Kpi("at_risk_save_rate", "percent", 40.0, None),
+    Kpi("qbr_completion_rate", "percent", 90.0, None),
+    Kpi("onboarding_handover_days", "days", 15.0, None, higher_is_better=False),
+    Kpi("cs_cost_pct_revenue", "percent", 2.3, None, higher_is_better=False),   # 140 / 6,000 (§5.4, §5.1)
+]
+
+# ---------------------------------------------------------------------------------------------
+# Company facts used as constants
+# ---------------------------------------------------------------------------------------------
+# COMPANY.md §3.3 Keep tiers (monthly, annual, support days per quarter; Enterprise has an embedded team)
+KEEP_TIERS: dict[str, dict] = {
+    "keep_essential": {"monthly_gbp": 8000, "annual_gbp": 96000, "support_days_per_quarter": 5},
+    "keep_plus": {"monthly_gbp": 18000, "annual_gbp": 216000, "support_days_per_quarter": 15},
+    "keep_enterprise": {"monthly_gbp": 40000, "annual_gbp": 480000, "support_days_per_quarter": None},
+}
+# COMPANY.md §3.1 / §3.2 prices used for expansion signals
+PRICES_GBP: dict[str, int] = {
+    "compass_spark": 45000, "compass_sprint": 120000, "compass_programme": 350000,
+    "forge_pilot": 90000, "forge_build": 260000, "forge_scale": 650000,
+}
+# COMPANY.md §2 land and expand: Keep on every Forge Build/Scale and >=40% of Compass Programmes
+KEEP_ATTACH: dict[str, str] = {
+    "forge_build": "keep_plus", "forge_scale": "keep_enterprise", "compass_programme": "keep_essential",
+}
+# COMPANY.md §10 journey: Spark -> Pilot -> Build -> Keep Plus
+UPSELL_PATH: dict[str, str] = {
+    "compass_spark": "forge_pilot", "compass_sprint": "forge_pilot", "forge_pilot": "forge_build",
+}
+# COMPANY.md §7: Keep renewal uplift is CPI + 2%, capped at 7%. CPI planning assumption: economics.md section 4.
+CPI_PLANNING_PCT = 3.0
+RENEWAL_UPLIFT_PCT = min(CPI_PLANNING_PCT + 2.0, 7.0)
+RENEWAL_LEAD_DAYS = 90            # renewal_due is emitted 90 days before term end (SOP-CUSTOMER_SUCCESS-07)
+CLIENT_DECISION_WINDOW_DAYS = 14  # days between renewal proposal and client decision in the model
+CLIENTS_PER_NAMED_CSM = 22        # coverage ceiling that triggers a hire request (economics.md section 3)
+POST_MORTEM_DAYS = 21             # 15 business days
+
+# COMPANY.md §5.4 department envelopes, GBP (people, non_people) by fiscal year
+BUDGET_GBP: dict[int, tuple[int, int]] = {
+    2026: (90000, 50000), 2027: (450000, 340000), 2028: (1240000, 390000),
+}
+# COMPANY.md §6.1 year-end humans and agents by fiscal year
+HEADCOUNT: dict[int, tuple[int, int]] = {2026: (1, 1), 2027: (6, 5), 2028: (14, 12)}
+
+# ---------------------------------------------------------------------------------------------
+# Health score model (SOP-CUSTOMER_SUCCESS-02)
+# ---------------------------------------------------------------------------------------------
+HEALTH_WEIGHTS: dict[str, float] = {
+    "adoption": 0.25,     # agent usage, active users, tasks automated vs plan
+    "delivery": 0.20,     # milestone status, quality issues, acceptance
+    "engagement": 0.15,   # sponsor and champion contact, QBR attendance
+    "commercial": 0.15,   # payment behaviour, dispute status
+    "sentiment": 0.15,    # NPS and CSAT
+    "support": 0.10,      # ticket severity, incidents affecting the client
+}
+GREEN_MIN = 75.0
+AMBER_MIN = 50.0
+CLEAR_RISK_MIN = 60.0
+INITIAL_COMPONENTS: dict[str, float] = {
+    "adoption": 65.0, "delivery": 75.0, "engagement": 80.0, "commercial": 90.0, "sentiment": 75.0,
+    "support": 85.0,
+}
+SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+TICKET_PRIORITY = {"critical": "P1", "high": "P2", "medium": "P3", "low": "P4"}
+SUPPORT_HIT = {"critical": 25.0, "high": 15.0, "medium": 5.0, "low": 0.0}
+QUALITY_HIT = {"critical": 30.0, "high": 20.0, "medium": 10.0, "low": 5.0}
+
+# Keep support SLAs: priority -> (first response target, resolution or workaround target), in hours.
+# Essential and Plus run on business hours (a business day = 10 hours, 08:00 to 18:00 UK). Enterprise P1 and P2
+# run 24x7 (COMPANY.md §3.3 24x7 incident cover). Targets are department assumptions (economics.md section 4).
+SUPPORT_SLA: dict[str, dict[str, tuple[float, Optional[float]]]] = {
+    "keep_essential": {"P1": (4, 10), "P2": (10, 30), "P3": (20, 50), "P4": (30, None)},
+    "keep_plus": {"P1": (1, 4), "P2": (4, 20), "P3": (10, 30), "P4": (20, None)},
+    "keep_enterprise": {"P1": (0.25, 4), "P2": (1, 8), "P3": (4, 20), "P4": (10, None)},
+}
+SAVEABLE_REASONS = ("price", "budget", "service_quality", "champion_left", "low_usage", "scope")
+
+
+def _clamp(value: float) -> float:
+    return max(0.0, min(100.0, value))
+
+
+class CustomerSuccessAgent(DepartmentAgent):
+    """Chief Customer Officer agent: keeps clients healthy, renewed and expanding."""
+
+    SUBSCRIBES = subscribes_for("customer_success")
+    PUBLISHES = publishes_for("customer_success")
+
+    # state accessors ----------------------------------------------------------------------
+    @property
+    def clients(self) -> dict[str, dict]:
+        return self.state.setdefault("clients", {})
+
+    def _counter(self, name: str) -> int:
+        counters = self.state.setdefault("counters", {})
+        counters[name] = counters.get(name, 0) + 1
+        return counters[name]
+
+    def _handlers(self) -> dict[str, Callable[[Message], list[Message]]]:
+        return {
+            "sales.deal_won": self._on_deal_won,
+            "legal.contract_signed": self._on_contract_signed,
+            "finance.billing_schedule_created": self._on_billing_schedule,
+            "delivery.engagement_kickoff": self._on_kickoff,
+            "delivery.milestone_reached": self._on_milestone,
+            "delivery.engagement_completed": self._on_engagement_completed,
+            "delivery.quality_issue_raised": self._on_quality_issue,
+            "finance.invoice_issued": self._on_invoice_issued,
+            "finance.payment_received": self._on_payment_received,
+            "finance.invoice_overdue": self._on_invoice_overdue,
+            "external.client_feedback_submitted": self._on_feedback,
+            "external.client_notice_of_termination": self._on_termination_notice,
+            "sales.renewal_proposal_sent": self._on_renewal_proposal,
+            "legal.client_dispute_raised": self._on_dispute,
+            "it_security.incident_detected": self._on_incident_detected,
+            "it_security.data_breach_confirmed": self._on_breach_confirmed,
+            "it_security.incident_resolved": self._on_incident_resolved,
+            "product.release_shipped": self._on_release_shipped,
+            "marketing.case_study_requested": self._on_case_study_requested,
+            "finance.budget_cycle_opened": self._on_budget_cycle,
+            "executive.budget_approved": self._on_budget_approved,
+            "executive.okrs_set": self._on_okrs_set,
+            "executive.strategy_updated": self._on_strategy_updated,
+            "executive.crisis_declared": self._on_crisis,
+            "customer_success.internal.renewal_decision": self._on_renewal_decision,
+            "customer_success.internal.save_deadline": self._on_save_deadline,
+        }
+
+    # contract -----------------------------------------------------------------------------
+    def handle(self, message: Message) -> list[Message]:
+        handler = self._handlers().get(message.topic)
+        if handler is None:
+            self.log_event("customer_success.activity.unhandled_topic", message.topic, message_id=message.id)
+            return []
+        out = handler(message)
+        return list(out)
+
+    def tick(self) -> list[Message]:
+        """Daily renewal scan, weekly health refresh and capacity check, quarterly QBR tasks."""
+        out: list[Message] = []
+        day = self.clock.day
+        for cid in sorted(self.clients):
+            c = self.clients[cid]
+            keep = c.get("keep")
+            if not keep or c["status"] == "churned" or keep["renewal_notified"]:
+                continue
+            if keep["term_end_day"] - day <= RENEWAL_LEAD_DAYS:
+                keep["renewal_notified"] = True
+                amount = c["annual_value_gbp"]
+                proposed = round(amount * (1 + RENEWAL_UPLIFT_PCT / 100.0))
+                self.create_task(f"Renewal plan for {c['client_name']} ({cid})", 5, "high")
+                out.append(self.emit("customer_success.renewal_due", {
+                    "client_id": cid, "client_name": c["client_name"], "contract_id": keep["contract_id"],
+                    "service_line": "keep", "tier": keep["tier"], "amount_gbp": amount,
+                    "proposed_uplift_pct": RENEWAL_UPLIFT_PCT, "proposed_amount_gbp": proposed,
+                    "due_day": keep["term_end_day"], "health_score": c["health"], "band": c["band"],
+                    "summary": f"Keep renewal for {c['client_name']} due in {keep['term_end_day'] - day} days",
+                }))
+        if self.clock.every(7):
+            out.extend(self._weekly_review())
+        if self.clock.is_month_start and self.clock.date.month in (1, 4, 7, 10):
+            self._schedule_qbrs()
+        return out
+
+    # core health model --------------------------------------------------------------------
+    @staticmethod
+    def score_of(components: dict[str, float]) -> float:
+        """Weighted health score 0 to 100, one decimal place."""
+        return round(sum(HEALTH_WEIGHTS[k] * components[k] for k in HEALTH_WEIGHTS), 1)
+
+    @staticmethod
+    def band_of(score: float) -> str:
+        return "green" if score >= GREEN_MIN else "amber" if score >= AMBER_MIN else "red"
+
+    def _get_client(self, body: dict) -> Optional[dict]:
+        cid = body.get("client_id")
+        if not cid:
+            name = body.get("client_name")
+            for existing in sorted(self.clients):
+                if name and self.clients[existing]["client_name"] == name:
+                    return self.clients[existing]
+            return None
+        if cid not in self.clients:
+            self.clients[cid] = {
+                "client_id": cid, "client_name": body.get("client_name", cid), "service_line": None,
+                "tier": None, "annual_value_gbp": int(body.get("amount_gbp", 0) or 0), "status": "onboarding",
+                "components": dict(INITIAL_COMPONENTS), "health": self.score_of(INITIAL_COMPONENTS),
+                "band": self.band_of(self.score_of(INITIAL_COMPONENTS)), "risk_open": False,
+                "risk_severity": None, "dispute": False, "keep": None, "last_touch_day": self.clock.day,
+                "nps_last": None, "csat_last": None, "overdue": {}, "invoices": {}, "case_study_consent": False,
+                "expansion_flags": [], "engagement_completed": False, "pre_notice_health": None,
+                "open_incidents": [], "qbr_quarters": [],
+            }
+            self.log_event("customer_success.activity.client_record_opened", cid, client_id=cid)
+        client = self.clients[cid]
+        if body.get("client_name") and client["client_name"] == cid:
+            client["client_name"] = body["client_name"]
+        return client
+
+    def _adjust(self, c: dict, **deltas: float) -> None:
+        for key, delta in deltas.items():
+            c["components"][key] = _clamp(c["components"][key] + delta)
+
+    def _rescore(self, c: dict, reason: str, force: bool = False) -> list[Message]:
+        prev_score, prev_band = c["health"], c["band"]
+        score = self.score_of(c["components"])
+        band = self.band_of(score)
+        c["health"], c["band"] = score, band
+        out: list[Message] = []
+        if force or band != prev_band or abs(score - prev_score) >= 5.0:
+            lowest = sorted(c["components"], key=lambda k: (c["components"][k], k))[:2]
+            out.append(self.emit("customer_success.health_score_updated", {
+                "client_id": c["client_id"], "client_name": c["client_name"], "health_score": score,
+                "band": band, "previous_score": prev_score, "previous_band": prev_band, "reason": reason,
+                "drivers": lowest, "service_line": c["service_line"], "tier": c["tier"],
+                "amount_gbp": c["annual_value_gbp"],
+                "summary": f"{c['client_name']} health {prev_score} -> {score} ({band}): {reason}",
+            }))
+        if band == "red":
+            out.extend(self._flag_risk(c, "critical" if score < 35.0 else "high", reason))
+        elif c["risk_open"] and score >= CLEAR_RISK_MIN and not c["dispute"]:
+            c["risk_open"], c["risk_severity"] = False, None
+            self.log_event("customer_success.activity.risk_cleared", c["client_id"], client_id=c["client_id"],
+                           health_score=score)
+        return out
+
+    def _flag_risk(self, c: dict, severity: str, reason: str) -> list[Message]:
+        if c["status"] == "churned":
+            return []
+        if c["risk_open"] and SEVERITY_RANK[severity] <= SEVERITY_RANK[c["risk_severity"] or "low"]:
+            return []
+        c["risk_open"], c["risk_severity"] = True, severity
+        self.create_task(f"Save plan for {c['client_name']} ({c['client_id']}): {reason}", 2,
+                         "critical" if severity == "critical" else "high")
+        return [self.emit("customer_success.churn_risk_flagged", {
+            "client_id": c["client_id"], "client_name": c["client_name"], "severity": severity,
+            "reason": reason, "health_score": c["health"], "band": c["band"],
+            "amount_gbp": c["annual_value_gbp"], "service_line": c["service_line"], "tier": c["tier"],
+            "recommended_action": "executive sponsor call within 2 business days; save plan owned by CCO",
+            "summary": f"Churn risk ({severity}) at {c['client_name']}: {reason}",
+        })]
+
+    def _touch(self, c: dict) -> None:
+        c["last_touch_day"] = self.clock.day
+
+    def _keep_tier(self, c: dict) -> str:
+        return (c["keep"] or {}).get("tier") or "keep_essential"
+
+    # lifecycle: onboarding ----------------------------------------------------------------
+    def _on_deal_won(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            self.log_event("customer_success.activity.unmatched", "deal_won without client", message_id=m.id)
+            return []
+        c["service_line"] = b.get("service_line", c["service_line"])
+        c["tier"] = b.get("tier", c["tier"])
+        if b.get("amount_gbp"):
+            c["annual_value_gbp"] = int(b["amount_gbp"])
+        if c["status"] == "churned":
+            c["status"] = "onboarding"
+        self._touch(c)
+        self.create_task(f"Welcome call and stakeholder map for {c['client_name']}", 2, "high")
+        self.create_task(f"Agree success plan and health baseline for {c['client_name']}", 10, "medium")
+        self.log_event("customer_success.activity.onboarding_started", c["client_name"], client_id=c["client_id"],
+                       deal_id=b.get("deal_id"), tier=c["tier"])
+        out = self._rescore(c, "new client baseline", force=True)
+        out.extend(self._capacity_check())
+        return out
+
+    def _on_contract_signed(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            return []
+        c["service_line"] = b.get("service_line", c["service_line"])
+        c["tier"] = b.get("tier", c["tier"])
+        out: list[Message] = []
+        if c["service_line"] == "keep" or str(c["tier"] or "").startswith("keep_"):
+            tier = c["tier"] if c["tier"] in KEEP_TIERS else "keep_essential"
+            start = int(b.get("start_day", self.clock.day))
+            term_months = int(b.get("term_months", 12))
+            annual = int(b.get("amount_gbp") or KEEP_TIERS[tier]["annual_gbp"])
+            c["annual_value_gbp"] = annual
+            c["keep"] = {"tier": tier, "contract_id": b.get("contract_id", "CT-0000"), "start_day": start,
+                         "term_end_day": start + round(term_months * 365 / 12), "renewal_notified": False,
+                         "renewal_proposed": False}
+            c["status"] = "active"
+            self.create_task(f"Keep onboarding: monitoring, SLA and QBR calendar for {c['client_name']}", 5, "high")
+            out.extend(self._rescore(c, "Keep contract signed", force=False))
+        else:
+            self.create_task(f"File contract {b.get('contract_id', '')} and confirm sponsor contacts", 3, "low")
+        self._touch(c)
+        self.log_event("customer_success.activity.contract_recorded", c["client_name"], client_id=c["client_id"],
+                       contract_id=b.get("contract_id"), tier=c["tier"])
+        return out
+
+    def _on_billing_schedule(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None:
+            return []
+        c["billing_schedule"] = {"contract_id": m.body.get("contract_id"),
+                                 "milestones": m.body.get("milestones", [])}
+        self.create_task(f"Confirm invoice contacts and PO references for {c['client_name']}", 3, "low")
+        self.log_event("customer_success.activity.billing_schedule_noted", c["client_name"],
+                       client_id=c["client_id"], contract_id=m.body.get("contract_id"))
+        return []
+
+    def _on_kickoff(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None:
+            return []
+        c["status"] = "in_delivery" if c["status"] in ("onboarding", "in_delivery") else c["status"]
+        c["engagement_id"] = m.body.get("engagement_id")
+        self._touch(c)
+        self._adjust(c, engagement=+5.0)
+        self.create_task(f"Handover pack and sponsor check-in for {c['client_name']} kickoff", 5, "medium")
+        self.log_event("customer_success.activity.kickoff_handover", c["client_name"], client_id=c["client_id"],
+                       engagement_id=m.body.get("engagement_id"))
+        return self._rescore(c, "engagement kicked off")
+
+    def _on_milestone(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None:
+            return []
+        self._touch(c)
+        self._adjust(c, delivery=+5.0, engagement=+2.0)
+        self.log_event("customer_success.activity.milestone_noted", c["client_name"], client_id=c["client_id"],
+                       engagement_id=m.body.get("engagement_id"), milestone=m.body.get("milestone"))
+        return self._rescore(c, "milestone reached")
+
+    def _on_engagement_completed(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            return []
+        tier = b.get("tier") or c["tier"]
+        c["status"] = "active"
+        c["engagement_completed"] = True
+        self._touch(c)
+        self._adjust(c, delivery=+10.0)
+        self.create_task(f"Closeout review and 30-day post-engagement check for {c['client_name']}", 30, "medium")
+        self.create_task(f"Send post-engagement NPS survey to {c['client_name']} sponsor", 7, "medium")
+        out = self._rescore(c, "engagement completed")
+        eng = b.get("engagement_id", "")
+        if eng in c["expansion_flags"] or c["dispute"] or c["band"] == "red":
+            return out
+        has_keep = c["keep"] is not None
+        rec_tier, rec_line, rec_amount = None, None, 0
+        if tier in KEEP_ATTACH and not has_keep:
+            rec_tier, rec_line = KEEP_ATTACH[tier], "keep"
+            rec_amount = KEEP_TIERS[rec_tier]["annual_gbp"]
+        elif tier in UPSELL_PATH:
+            rec_tier = UPSELL_PATH[tier]
+            rec_line, rec_amount = "forge", PRICES_GBP[rec_tier]
+        if rec_tier:
+            c["expansion_flags"].append(eng)
+            out.append(self.emit("customer_success.expansion_opportunity_identified", {
+                "client_id": c["client_id"], "client_name": c["client_name"], "engagement_id": eng,
+                "service_line": rec_line, "tier": rec_tier, "amount_gbp": rec_amount,
+                "source_tier": tier, "health_score": c["health"],
+                "rationale": "land-and-expand path from completed " + str(tier),
+                "summary": f"Recommend {rec_tier} for {c['client_name']} after {tier}",
+            }))
+        return out
+
+    # lifecycle: quality, billing -------------------------------------------------------------
+    def _on_quality_issue(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            return []
+        sev = b.get("severity", "medium")
+        sev = sev if sev in SEVERITY_RANK else "medium"
+        self._adjust(c, delivery=-QUALITY_HIT[sev], sentiment=-(QUALITY_HIT[sev] / 2.0))
+        self.create_task(f"Recovery plan with delivery for {c['client_name']}: {b.get('summary', 'quality issue')}",
+                         2, "high" if SEVERITY_RANK[sev] >= 3 else "medium")
+        self.log_event("customer_success.activity.quality_issue_noted", c["client_name"], client_id=c["client_id"],
+                       severity=sev)
+        out = self._rescore(c, f"delivery quality issue ({sev})")
+        if SEVERITY_RANK[sev] >= 3:
+            out.extend(self._flag_risk(c, "high", f"delivery quality issue ({sev})"))
+        return out
+
+    def _on_invoice_issued(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None:
+            return []
+        inv = m.body.get("invoice_id", f"INV-UNKNOWN-{self._counter('inv'):04d}")
+        c["invoices"][inv] = int(m.body.get("amount_gbp", 0) or 0)
+        self.log_event("customer_success.activity.invoice_noted", c["client_name"], client_id=c["client_id"],
+                       invoice_id=inv)
+        return []
+
+    def _on_payment_received(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None:
+            return []
+        inv = m.body.get("invoice_id")
+        c["invoices"].pop(inv, None)
+        c["overdue"].pop(inv, None)
+        if not c["overdue"]:
+            c["components"]["commercial"] = max(c["components"]["commercial"], 90.0)
+        self._touch(c)
+        self.log_event("customer_success.activity.payment_noted", c["client_name"], client_id=c["client_id"],
+                       invoice_id=inv)
+        return self._rescore(c, "payment received")
+
+    def _on_invoice_overdue(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            return []
+        days = int(b.get("days_overdue", 7))
+        inv = b.get("invoice_id", f"INV-UNKNOWN-{self._counter('inv'):04d}")
+        c["overdue"][inv] = days
+        worst = max(c["overdue"].values())
+        # COMPANY.md §7 ladder: reminder day 31, call day 38, finance-head escalation day 45
+        commercial = 90.0 if worst <= 0 else 75.0 if worst < 31 else 50.0 if worst < 45 else 25.0
+        c["components"]["commercial"] = min(c["components"]["commercial"], commercial)
+        self.create_task(f"Relationship call with sponsor of {c['client_name']} alongside finance (day 38 step)",
+                         max(0, 38 - days), "medium")
+        self.log_event("customer_success.activity.overdue_noted", c["client_name"], client_id=c["client_id"],
+                       invoice_id=inv, days_overdue=days)
+        return self._rescore(c, f"invoice {inv} overdue {days} days")
+
+    # feedback and support -------------------------------------------------------------------
+    def _on_feedback(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            self.log_event("customer_success.activity.unmatched", "feedback without client", message_id=m.id)
+            return []
+        kind = b.get("kind", "nps")
+        self._touch(c)
+        out: list[Message] = []
+        if kind == "support_ticket":
+            return self._on_ticket(c, b)
+        category = kind
+        score = b.get("score")
+        if kind == "nps" and score is not None:
+            score = max(0, min(10, int(score)))
+            c["nps_last"] = score
+            category = "promoter" if score >= 9 else "passive" if score >= 7 else "detractor"
+            c["components"]["sentiment"] = _clamp(score * 10.0)
+            if category == "detractor":
+                self.create_task(f"Close the loop with {c['client_name']} detractor within 2 business days", 2, "high")
+        elif kind == "csat" and score is not None:
+            score = max(1, min(5, int(score)))
+            c["csat_last"] = score
+            c["components"]["sentiment"] = _clamp((score - 1) * 25.0)
+        elif kind == "complaint":
+            self._adjust(c, sentiment=-20.0)
+            self.create_task(f"Respond to complaint from {c['client_name']} within 1 business day", 1, "high")
+        elif kind == "praise":
+            self._adjust(c, sentiment=+10.0)
+        theme = self.ask_llm(f"Summarise this client feedback in eight words: {b.get('text', '')}")
+        out.extend(self._rescore(c, f"feedback {category}"))
+        out.append(self.emit("customer_success.feedback_received", {
+            "client_id": c["client_id"], "client_name": c["client_name"], "kind": kind, "score": score,
+            "category": category, "severity": b.get("severity", "low"), "theme": theme,
+            "text": b.get("text", ""), "service_line": c["service_line"],
+            "summary": f"{kind} feedback from {c['client_name']}: {category}",
+        }))
+        if b.get("expansion_signal") and not c["dispute"]:
+            out.append(self.emit("customer_success.expansion_opportunity_identified", {
+                "client_id": c["client_id"], "client_name": c["client_name"],
+                "service_line": b.get("expansion_service_line", "forge"),
+                "tier": b.get("expansion_tier", "forge_pilot"),
+                "amount_gbp": int(b.get("expansion_amount_gbp", PRICES_GBP["forge_pilot"])),
+                "rationale": str(b.get("expansion_signal")), "health_score": c["health"],
+                "summary": f"Client-voiced expansion signal at {c['client_name']}",
+            }))
+        return out
+
+    def _on_ticket(self, c: dict, b: dict) -> list[Message]:
+        sev = b.get("severity", "medium")
+        sev = sev if sev in SEVERITY_RANK else "medium"
+        prio = TICKET_PRIORITY[sev]
+        tier = self._keep_tier(c)
+        response_h, resolve_h = SUPPORT_SLA[tier][prio]
+        ticket = b.get("ticket_id") or f"TKT-{self._counter('ticket'):04d}"
+        due_days = 0 if tier == "keep_enterprise" and prio in ("P1", "P2") else math.ceil(response_h / 10.0)
+        self.create_task(f"{prio} ticket {ticket} for {c['client_name']}: first response within {response_h}h",
+                         due_days, "critical" if prio == "P1" else "high" if prio == "P2" else "medium")
+        self._adjust(c, support=-SUPPORT_HIT[sev])
+        self.log_event("customer_success.activity.ticket_triaged", ticket, client_id=c["client_id"], priority=prio,
+                       sla_response_hours=response_h, sla_resolution_hours=resolve_h, keep_tier=tier)
+        out = self._rescore(c, f"{prio} support ticket")
+        if SEVERITY_RANK[sev] >= 3:
+            out.append(self.emit("customer_success.support_escalated", {
+                "client_id": c["client_id"], "client_name": c["client_name"], "ticket_id": ticket,
+                "severity": sev, "priority": prio, "keep_tier": tier, "sla_response_hours": response_h,
+                "sla_resolution_hours": resolve_h, "summary": b.get("text", "client support escalation"),
+                "engagement_id": c.get("engagement_id"),
+            }))
+        return out
+
+    # churn prevention, renewals, churn ------------------------------------------------------
+    def _on_dispute(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None:
+            return []
+        c["dispute"] = True
+        self._adjust(c, engagement=-15.0, sentiment=-25.0, commercial=-30.0)
+        self.create_task(f"Hold expansion and renewal outreach for {c['client_name']}; align with legal", 1,
+                         "critical")
+        self.log_event("customer_success.activity.dispute_noted", c["client_name"], client_id=c["client_id"],
+                       severity=m.body.get("severity"))
+        out = self._rescore(c, "legal dispute raised")
+        out.extend(self._flag_risk(c, "high", "legal dispute raised"))
+        return out
+
+    def _on_termination_notice(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None:
+            self.log_event("customer_success.activity.unmatched", "termination without client", message_id=m.id)
+            return []
+        reason = b.get("reason", "unspecified")
+        notice = int(b.get("notice_period_days", 30))
+        c["pre_notice_health"] = c["health"]
+        c["termination_reason"] = reason
+        self._adjust(c, sentiment=-40.0, engagement=-20.0)
+        self.create_task(f"Executive save call with {c['client_name']} sponsor (reason: {reason})", 2, "critical")
+        self.create_task(f"Prepare churn post-mortem file for {c['client_name']}", 10, "medium")
+        self.log_event("customer_success.activity.termination_notice", c["client_name"], client_id=c["client_id"],
+                       reason=reason, notice_period_days=notice)
+        out = self._rescore(c, f"termination notice ({reason})")
+        out.extend(self._flag_risk(c, "critical", f"termination notice ({reason})"))
+        out.append(self.emit("customer_success.internal.save_deadline", {
+            "client_id": c["client_id"], "reason": reason, "notice_period_days": notice,
+        }, recipient=self.department, delay_days=max(1, min(notice // 2, 14))))
+        return out
+
+    def _on_save_deadline(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None or c["status"] == "churned":
+            return []
+        reason = m.body.get("reason", "unspecified")
+        pre = c["pre_notice_health"] if c["pre_notice_health"] is not None else c["health"]
+        saved = reason in SAVEABLE_REASONS and pre >= 55.0 and not c["dispute"]
+        if saved:
+            c["components"]["sentiment"] = max(c["components"]["sentiment"], 60.0)
+            c["components"]["engagement"] = max(c["components"]["engagement"], 70.0)
+            c["risk_open"], c["risk_severity"], c["pre_notice_health"] = False, None, None
+            self._touch(c)
+            self.log_event("customer_success.activity.save_succeeded", c["client_name"], client_id=c["client_id"],
+                           reason=reason)
+            return self._rescore(c, "termination withdrawn after save plan", force=True)
+        return self._churn(c, reason, "termination")
+
+    def _on_renewal_proposal(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b)
+        if c is None or not c["keep"]:
+            self.log_event("customer_success.activity.unmatched", "renewal proposal without Keep contract",
+                           message_id=m.id)
+            return []
+        c["keep"]["renewal_proposed"] = True
+        c["keep"]["proposed_amount_gbp"] = int(b.get("amount_gbp") or c["annual_value_gbp"])
+        self._touch(c)
+        out: list[Message] = []
+        if c["band"] == "red" or c["dispute"]:
+            out.extend(self._flag_risk(c, "high", "renewal proposal issued to at-risk client"))
+        out.append(self.emit("customer_success.internal.renewal_decision", {
+            "client_id": c["client_id"], "contract_id": c["keep"]["contract_id"],
+            "client_decision": b.get("client_decision"),
+        }, recipient=self.department, delay_days=CLIENT_DECISION_WINDOW_DAYS))
+        self.log_event("customer_success.activity.renewal_proposal_noted", c["client_name"],
+                       client_id=c["client_id"], amount_gbp=c["keep"]["proposed_amount_gbp"])
+        return out
+
+    def _on_renewal_decision(self, m: Message) -> list[Message]:
+        c = self._get_client(m.body)
+        if c is None or not c["keep"] or c["status"] == "churned":
+            return []
+        decision = m.body.get("client_decision")
+        if decision is None:
+            decision = "churn" if (c["band"] == "red" or c["dispute"]) else "renew"
+        if decision == "churn":
+            return self._churn(c, "non-renewal", "non_renewal")
+        keep = c["keep"]
+        previous = c["annual_value_gbp"]
+        new_amount = int(keep.get("proposed_amount_gbp") or previous)
+        keep["term_end_day"] += 365
+        keep["renewal_notified"], keep["renewal_proposed"] = False, False
+        c["annual_value_gbp"] = new_amount
+        self._touch(c)
+        self.create_task(f"Renewal onboarding and updated QBR calendar for {c['client_name']}", 10, "medium")
+        return [self.emit("customer_success.renewal_confirmed", {
+            "client_id": c["client_id"], "client_name": c["client_name"], "contract_id": keep["contract_id"],
+            "service_line": "keep", "tier": keep["tier"], "amount_gbp": new_amount,
+            "previous_amount_gbp": previous, "nrr_delta_gbp": new_amount - previous, "term_months": 12,
+            "new_term_end_day": keep["term_end_day"], "summary": f"{c['client_name']} renewed Keep for 12 months",
+        })]
+
+    def _churn(self, c: dict, reason: str, churn_type: str) -> list[Message]:
+        c["status"], c["risk_open"] = "churned", False
+        due = self.clock.day + POST_MORTEM_DAYS
+        self.create_task(f"Churn post-mortem for {c['client_name']} ({c['client_id']}) by day {due}",
+                         POST_MORTEM_DAYS, "high")
+        self.log_event("customer_success.activity.client_lost", c["client_name"], client_id=c["client_id"],
+                       reason=reason, churn_type=churn_type)
+        return [self.emit("customer_success.client_churned", {
+            "client_id": c["client_id"], "client_name": c["client_name"], "amount_gbp": c["annual_value_gbp"],
+            "reason": reason, "churn_type": churn_type, "service_line": c["service_line"], "tier": c["tier"],
+            "health_at_churn": c["health"], "last_nps": c["nps_last"], "post_mortem_due_day": due,
+            "summary": f"{c['client_name']} churned ({churn_type}): {reason}",
+        })]
+
+    # security incidents and releases ---------------------------------------------------------
+    def _affected(self, body: dict) -> list[dict]:
+        found = []
+        for cid in sorted(set(body.get("affected_client_ids", []) or [])):
+            c = self._get_client({"client_id": cid})
+            if c is not None:
+                found.append(c)
+        return found
+
+    def _on_incident_detected(self, m: Message) -> list[Message]:
+        b = m.body
+        sev = b.get("severity", "medium")
+        sev = sev if sev in SEVERITY_RANK else "medium"
+        out: list[Message] = []
+        affected = self._affected(b)
+        for c in affected:
+            c["open_incidents"].append(b.get("incident_id", "INC-0000"))
+            self._adjust(c, support=-SUPPORT_HIT[sev])
+            self._touch(c)
+            self.create_task(f"Holding statement and named-contact call for {c['client_name']} ({sev} incident)", 0,
+                             "critical" if SEVERITY_RANK[sev] >= 3 else "high")
+            out.extend(self._rescore(c, f"security incident {b.get('incident_id', '')} ({sev})"))
+        if not affected and sev == "critical":
+            for cid in sorted(self.clients):
+                c = self.clients[cid]
+                if c["keep"] and c["keep"]["tier"] == "keep_enterprise" and c["status"] != "churned":
+                    self.create_task(f"Proactive incident briefing for Enterprise client {c['client_name']}", 0,
+                                     "critical")
+        self.log_event("customer_success.activity.incident_noted", b.get("incident_id", ""), severity=sev,
+                       affected=[c["client_id"] for c in affected])
+        return out
+
+    def _on_breach_confirmed(self, m: Message) -> list[Message]:
+        b = m.body
+        out: list[Message] = []
+        for c in self._affected(b):
+            self._adjust(c, support=-40.0, sentiment=-30.0, engagement=-10.0)
+            self.create_task(f"Executive call and data-protection support pack for {c['client_name']}", 0,
+                             "critical")
+            out.extend(self._rescore(c, "confirmed data breach affecting client"))
+            out.extend(self._flag_risk(c, "critical", "confirmed data breach affecting client"))
+        self.log_event("customer_success.activity.breach_noted", b.get("incident_id", ""),
+                       affected=sorted(set(b.get("affected_client_ids", []) or [])))
+        return out
+
+    def _on_incident_resolved(self, m: Message) -> list[Message]:
+        b = m.body
+        out: list[Message] = []
+        iid = b.get("incident_id", "INC-0000")
+        for c in self._affected(b):
+            if iid in c["open_incidents"]:
+                c["open_incidents"].remove(iid)
+            self._adjust(c, support=+20.0)
+            self.create_task(f"Post-incident review and written RCA for {c['client_name']} ({iid})", 5, "high")
+            out.extend(self._rescore(c, f"incident {iid} resolved"))
+        self.log_event("customer_success.activity.incident_resolved_noted", iid)
+        return out
+
+    def _on_release_shipped(self, m: Message) -> list[Message]:
+        b = m.body
+        breaking = bool(b.get("breaking_change", False))
+        keep_clients = [cid for cid in sorted(self.clients)
+                        if self.clients[cid]["keep"] and self.clients[cid]["status"] != "churned"]
+        if breaking:
+            for cid in keep_clients:
+                c = self.clients[cid]
+                self.create_task(f"Change notice and change window for {c['client_name']} (release "
+                                 f"{b.get('release_id', '')})", 5, "high")
+        else:
+            self.create_task(f"Add release {b.get('release_id', '')} to next QBR packs and client bulletin", 14,
+                             "low")
+        self.log_event("customer_success.activity.release_noted", b.get("release_id", ""), breaking_change=breaking,
+                       keep_clients=len(keep_clients))
+        return []
+
+    # marketing references --------------------------------------------------------------------
+    def _eligible_reference(self, c: dict) -> bool:
+        return (c["band"] == "green" and not c["dispute"] and c["status"] != "churned"
+                and (c["nps_last"] or 0) >= 9 and (c["engagement_completed"] or c["keep"] is not None))
+
+    def _on_case_study_requested(self, m: Message) -> list[Message]:
+        b = m.body
+        c = self._get_client(b) if b.get("client_id") or b.get("client_name") else None
+        if c is None:
+            candidates = [self.clients[k] for k in sorted(self.clients) if self._eligible_reference(self.clients[k])]
+            candidates.sort(key=lambda x: (-x["health"], x["client_id"]))
+            c = candidates[0] if candidates else None
+        if c is None or not self._eligible_reference(c):
+            self.log_event("customer_success.activity.case_study_declined", m.id, request_id=b.get("request_id"),
+                           reason="no eligible client (needs green band, NPS>=9, no dispute)")
+            return []
+        consent = bool(b.get("client_consent", c["case_study_consent"]))
+        if not consent:
+            self.create_task(f"Ask {c['client_name']} sponsor for case-study consent and legal sign-off", 5, "medium")
+            self.log_event("customer_success.activity.case_study_consent_pending", c["client_name"],
+                           client_id=c["client_id"])
+            return []
+        c["case_study_consent"] = True
+        return [self.emit("customer_success.case_study_approved", {
+            "client_id": c["client_id"], "client_name": c["client_name"], "request_id": b.get("request_id"),
+            "usage_scope": "named", "approved_by": "Chief Customer Officer", "health_score": c["health"],
+            "service_line": c["service_line"], "tier": c["tier"],
+            "summary": f"Client {c['client_name']} approved as a named case study",
+        })]
+
+    # governance and planning -----------------------------------------------------------------
+    def _fiscal_year(self, body: dict) -> int:
+        if body.get("fiscal_year"):
+            return int(body["fiscal_year"])
+        budget_id = str(body.get("budget_id", ""))
+        if budget_id.startswith("BUD-") and budget_id[4:].isdigit():
+            return int(budget_id[4:])
+        return self.clock.date.year + (1 if self.clock.date.month >= 10 else 0)
+
+    def _on_budget_cycle(self, m: Message) -> list[Message]:
+        fy = self._fiscal_year(m.body)
+        key = min(max(fy, 2026), 2028)
+        people, other = BUDGET_GBP[key]
+        humans, agents = HEADCOUNT[key]
+        budget_id = m.body.get("budget_id", f"BUD-{fy}")
+        if budget_id in self.state.setdefault("budgets_submitted", []):
+            return []
+        self.state["budgets_submitted"].append(budget_id)
+        return [self.emit("customer_success.budget_submitted", {
+            "budget_id": budget_id, "department": "customer_success", "fiscal_year": fy,
+            "people_gbp": people, "non_people_gbp": other, "amount_gbp": people + other,
+            "headcount_humans": humans, "headcount_agents": agents, "cost_of_revenue": True,
+            "summary": f"customer_success budget {budget_id}: {people + other} GBP",
+        })]
+
+    def _on_budget_approved(self, m: Message) -> list[Message]:
+        self.state["approved_budget"] = {"budget_id": m.body.get("budget_id"),
+                                         "amount_gbp": m.body.get("amount_gbp")}
+        self.log_event("customer_success.activity.budget_approved_noted", str(m.body.get("budget_id", "")))
+        return []
+
+    def _on_okrs_set(self, m: Message) -> list[Message]:
+        self.state["okrs"] = m.body.get("okrs", m.body)
+        self.create_task("Map company OKRs to customer_success KPIs and update targets", 10, "medium")
+        self.log_event("customer_success.activity.okrs_noted", "okrs received")
+        return []
+
+    def _on_strategy_updated(self, m: Message) -> list[Message]:
+        self.state["strategy_note"] = m.body.get("summary", "")
+        self.create_task("Review health model weights and playbooks against updated strategy", 14, "low")
+        self.log_event("customer_success.activity.strategy_noted", m.body.get("summary", ""))
+        return []
+
+    def _on_crisis(self, m: Message) -> list[Message]:
+        self.state["crisis_mode"] = True
+        count = 0
+        for cid in sorted(self.clients):
+            c = self.clients[cid]
+            if c["status"] != "churned" and (c["band"] != "green" or (c["keep"] and c["keep"]["tier"] ==
+                                                                       "keep_enterprise")):
+                self.create_task(f"Crisis outreach to {c['client_name']} sponsor", 1, "critical")
+                count += 1
+        self.log_event("customer_success.activity.crisis_mode", m.body.get("summary", "crisis declared"),
+                       outreach_tasks=count)
+        return []
+
+    # scheduled behaviour -------------------------------------------------------------------
+    def _weekly_review(self) -> list[Message]:
+        out: list[Message] = []
+        for cid in sorted(self.clients):
+            c = self.clients[cid]
+            if c["status"] == "churned":
+                continue
+            if self.clock.day - c["last_touch_day"] > 45:
+                self._adjust(c, engagement=-3.0)
+                out.extend(self._rescore(c, "no sponsor contact for over 45 days"))
+        out.extend(self._capacity_check())
+        self.log_event("customer_success.activity.weekly_health_review", f"day {self.clock.day}",
+                       clients=len(self.clients))
+        return out
+
+    def _schedule_qbrs(self) -> None:
+        quarter = f"{self.clock.date.year}-Q{self.clock.quarter}"
+        for cid in sorted(self.clients):
+            c = self.clients[cid]
+            if c["keep"] and c["status"] != "churned" and quarter not in c["qbr_quarters"]:
+                c["qbr_quarters"].append(quarter)
+                self.create_task(f"QBR {quarter} for {c['client_name']} ({c['keep']['tier']})", 21, "medium")
+
+    def _capacity_check(self) -> list[Message]:
+        active = sum(1 for c in self.clients.values() if c["status"] != "churned")
+        planned = self.state.setdefault("named_csm_planned", 1)
+        needed = max(1, math.ceil(active / CLIENTS_PER_NAMED_CSM))
+        if needed <= planned:
+            return []
+        extra = needed - planned
+        self.state["named_csm_planned"] = needed
+        return [self.emit("customer_success.hire_requested", {
+            "role_title": "Customer Success Manager", "level": "manager", "count": extra,
+            "department": "customer_success", "active_clients": active,
+            "clients_per_csm_ceiling": CLIENTS_PER_NAMED_CSM,
+            "trigger": f"{active} active clients exceed {CLIENTS_PER_NAMED_CSM} per named CSM",
+            "summary": f"Request {extra} Customer Success Manager(s) for client coverage",
+        })]
+
+
+def build_agent(llm, bus, clock, log) -> CustomerSuccessAgent:
+    """Construct the department agent (does not register with the bus or publish)."""
+    # COMPANY.md §9.2 head, §6.2 head band
+    role = Role("Chief Customer Officer", "customer_success", "head", (1, 1, 1), (140000, 200000),
+                "Chief Executive Officer")
+    return CustomerSuccessAgent("customer_success", "customer_success", role, llm, bus, clock, log)
