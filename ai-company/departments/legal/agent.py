@@ -32,6 +32,13 @@ LATE_PAYMENT_MARGIN_PCT = 8.0           # COMPANY.md §7: 8% over base rate
 ICO_DEADLINE_HOURS = 72                 # UK GDPR Art 33(1); COMPANY.md §9.3
 CLIENT_BREACH_NOTICE_HOURS = 48         # playbook standard for contractual notice to a client (controller)
 SIGNATURE_LEAD_DAYS = {"standard": 3, "fallback": 5, "escalated": 5}
+# Human review SLA before the draft is released (sops.md SOP-LEGAL-01 step 5): 3 days standard, 2 otherwise.
+REVIEW_SLA_DAYS = {"standard": 3, "fallback": 2, "escalated": 2}
+GC_DECISION_HOURS = 24                  # sops.md SOP-LEGAL-02 step 4: GC reviews a flag within 24 hours
+AI_SIGNOFF_DAYS = 3                     # sops.md SOP-LEGAL-07 step 3: GC sign-off task due in 3 days
+DSAR_DEADLINE_DAYS = 30                 # UK GDPR Art 12(3): one month (modelled as 30 days); kpis.md dsar_on_time_pct
+DSAR_WARNING_DAYS = 7                   # sops.md SOP-LEGAL-13 step 5: flag open DSARs at 7 days or fewer
+REVENUE_GBP = {2026: 6_000_000, 2027: 19_500_000, 2028: 46_200_000}   # COMPANY.md §5.1 (for legal_cost_pct_revenue)
 DEFAULT_DISCOUNT_LIMIT_PCT = 10.0       # COMPANY.md §9.3: discount > 10% needs Finance head and CEO
 TRAINING_TARGET_PCT = 95.0              # kpis.md compliance_training_completion_pct FY2026
 RATE_CARD_GBP = {                       # COMPANY.md §3.5
@@ -53,7 +60,7 @@ NON_PEOPLE_LINES_GBP = {
 }
 HEADCOUNT = {2026: (1, 1), 2027: (3, 3), 2028: (5, 5)}   # (humans, agents) year-end, COMPANY.md §6.1
 
-# (year, month, role, level, (band min, band max), start quarter label) requisitions (blueprint section 5)
+# (year, month, role, level, (band min, band max), start quarter label) requisitions (blueprint.md section 5)
 HIRING_PLAN: tuple[tuple[int, int, str, str, tuple[int, int], str], ...] = (
     (2027, 1, "Commercial and Privacy Counsel", "manager", (92_000, 115_000), "Q2 FY2027"),
     (2027, 4, "Contracts Specialist", "consultant", (55_000, 70_000), "Q3 FY2027"),
@@ -68,7 +75,8 @@ MONTHLY_CALENDAR = {
     10: "Quarterly regulatory horizon review; open annual legal budget input (BUD cycle)",
 }
 
-# Contract playbook (blueprint section 2 of sops.md SOP-LEGAL-02): clause -> standard / fallback / escalate.
+# Contract playbook (sops.md, section "Contract playbook (clause positions)", used by SOP-LEGAL-01/02):
+# clause -> standard / fallback / escalate.
 PLAYBOOK: dict[str, dict[str, Any]] = {
     "liability_cap": {
         "standard": "Aggregate cap of 100% of fees paid or payable in the 12 months before the claim",
@@ -306,6 +314,7 @@ class LegalAgent(DepartmentAgent):
                       "soc2_type2": "planned"},
             "okrs": {}, "board_meetings": [], "leavers": [], "hires_requested": [], "crisis_active": False,
             "training": {}, "budget": {}, "strategy_flags": [],
+            "escalations": {}, "dsars": {}, "triage_days": [], "ai_reviews": {},
         })
         self._handlers: dict[str, Callable[[Message], list[Message]]] = {
             "sales.deal_won": self._on_deal_won,
@@ -342,6 +351,9 @@ class LegalAgent(DepartmentAgent):
             "product.ai_risk_review_requested": self._on_ai_risk_review_requested,
             "legal.internal.signature_due": self._on_signature_due,
             "legal.internal.ico_filing_due": self._on_ico_filing_due,
+            "legal.internal.review_release_due": self._on_review_release_due,
+            "legal.internal.gc_decision_due": self._on_gc_decision_due,
+            "legal.internal.ai_signoff_due": self._on_ai_signoff_due,
         }
 
     # ------------------------------------------------------------------------------------------------
@@ -366,6 +378,7 @@ class LegalAgent(DepartmentAgent):
         out: list[Message] = []
         self._watch_breach_deadlines()
         if self.clock.every(7):
+            self._dsar_watch()
             open_contracts = [c for c in self.state["contracts"].values()
                               if c["status"] in ("pending_approval", "awaiting_signature")]
             self.log_event("legal.activity.weekly_matter_review", "weekly matter and approvals review",
@@ -382,7 +395,7 @@ class LegalAgent(DepartmentAgent):
                     out.append(self.emit("legal.hire_requested", {
                         "department": "legal", "role": role, "level": level, "count": 1,
                         "salary_band_gbp": list(band), "start_quarter": start,
-                        "summary": f"Legal hiring plan requisition: {role} (blueprint section 5)"}))
+                        "summary": f"Legal hiring plan requisition: {role} (blueprint.md section 5)"}))
         return self._public(out)
 
     # ------------------------------------------------------------------------------------------------
@@ -445,7 +458,11 @@ class LegalAgent(DepartmentAgent):
                   "client_name": b.get("client_name", ""), "amount_gbp": amount, "service_line": service_line,
                   "tier": b.get("tier", ""), "contract_type": contract_type, "position": position,
                   "status": status, "approvals_pending": pending, "drafted_day": self.clock.day,
-                  "signed_day": None, "warranties": list(terms.get("certification_warranties") or [])}
+                  "requested_day": self.clock.day, "released": False, "released_day": None,
+                  "signed_day": None, "warranties": list(terms.get("certification_warranties") or []),
+                  "non_standard_liability": any(f["clause"] == "liability_cap" and f["position"] != "standard"
+                                                for f in findings),
+                  "review_task": ""}
         if extra:
             record.update(extra)
         self.state["contracts"][contract_id] = record
@@ -457,8 +474,7 @@ class LegalAgent(DepartmentAgent):
                 "billing_terms": self._billing_terms(service_line, contract_type),
                 "human_review": "full_review" if position != "standard" or amount >= DEAL_CEO_THRESHOLD_GBP
                 else "sample_check",
-                "due_day": self.clock.day + SIGNATURE_LEAD_DAYS[position], "summary":
-                f"{contract_type} {contract_id} drafted from playbook ({position})"}
+                "summary": f"{contract_type} {contract_id} drafted from playbook ({position})"}
         if b.get("engagement_id"):
             body["engagement_id"] = b["engagement_id"]
         if extra:
@@ -467,15 +483,50 @@ class LegalAgent(DepartmentAgent):
             self.state["flagged_deals"].append(deal_id)
             out.append(self._pub("legal.contract_risk_flagged", self._risk_body(
                 deal_id, client_id, findings, contract_id, amount)))
-        out.append(self._pub("legal.contract_drafted", body, reply_to=msg.id))
-        self.create_task(f"Human lawyer review of {contract_id} ({position})",
-                         due_in_days=2 if position != "standard" else 3,
-                         priority="high" if position == "escalated" else "medium")
-        if status == "awaiting_signature":
-            self._internal("legal.internal.signature_due", {"contract_id": contract_id},
-                           SIGNATURE_LEAD_DAYS[position])
-        self.log_event("legal.activity.contract_drafted", body["summary"], contract_id=contract_id,
-                       deal_id=deal_id, status=status, severity=severity)
+            self._raise_escalation("contract_terms", deal_id)
+        # The agent prepares the draft; the human lawyer review gates its release to the client (sops.md
+        # SOP-LEGAL-01 steps 5-6). legal.contract_drafted is emitted when the review SLA has elapsed.
+        record["draft_body"] = body
+        record["draft_reply_to"] = msg.id
+        task = self.create_task(f"Human lawyer review of {contract_id} ({position})",
+                                due_in_days=REVIEW_SLA_DAYS[position],
+                                priority="high" if position == "escalated" else "medium")
+        record["review_task"] = task.id
+        self._internal("legal.internal.review_release_due", {"contract_id": contract_id},
+                       REVIEW_SLA_DAYS[position])
+        self.log_event("legal.activity.contract_draft_prepared", body["summary"], contract_id=contract_id,
+                       deal_id=deal_id, status=status, severity=severity,
+                       review_sla_days=REVIEW_SLA_DAYS[position])
+        return out
+
+    def _on_review_release_due(self, msg: Message) -> list[Message]:
+        """Models the human lawyer finishing the review and releasing the first draft to the client."""
+        c = self.state["contracts"].get(msg.body.get("contract_id", ""))
+        if not c or c["released"] or "draft_body" not in c:
+            return []
+        if c["status"] == "cancelled":
+            if c.get("review_task") in self.tasks:
+                self.update_task(c["review_task"], "cancelled")
+            self.log_event("legal.activity.draft_release_skipped", "contract cancelled before release",
+                           contract_id=c["contract_id"])
+            return []
+        c["released"] = True
+        c["released_day"] = self.clock.day
+        c["drafted_day"] = self.clock.day
+        if c.get("review_task") in self.tasks:
+            self.update_task(c["review_task"], "done")
+        body = dict(c.pop("draft_body"))
+        reply_to = c.pop("draft_reply_to", None)
+        body.update({"status": c["status"], "approvals_required": list(c["approvals_pending"]),
+                     "released_day": self.clock.day, "requested_day": c["requested_day"],
+                     "turnaround_days": self.clock.day - c["requested_day"],
+                     "due_day": self.clock.day + SIGNATURE_LEAD_DAYS[c["position"]]})
+        out = [self._pub("legal.contract_drafted", body, reply_to=reply_to)]
+        if c["status"] == "awaiting_signature":
+            self._internal("legal.internal.signature_due", {"contract_id": c["contract_id"]},
+                           SIGNATURE_LEAD_DAYS[c["position"]])
+        self.log_event("legal.activity.contract_drafted", body["summary"], contract_id=c["contract_id"],
+                       deal_id=c["deal_id"], status=c["status"], turnaround_days=body["turnaround_days"])
         return out
 
     @staticmethod
@@ -519,6 +570,7 @@ class LegalAgent(DepartmentAgent):
             out.append(self._pub("legal.contract_risk_flagged",
                                  self._risk_body(deal_id, b.get("client_id", ""), findings, "", amount),
                                  reply_to=msg.id))
+            self._raise_escalation("contract_terms", deal_id)
         self.log_event("legal.activity.deal_terms_reviewed", f"{deal_id} position {position}",
                        deal_id=deal_id, amount_gbp=amount, position=position, findings=len(findings))
         return out
@@ -540,8 +592,9 @@ class LegalAgent(DepartmentAgent):
                                           if a == "Board" and not b.get("board_approved")]
                 if not c["approvals_pending"]:
                     c["status"] = "awaiting_signature"
-                    self._internal("legal.internal.signature_due", {"contract_id": c["contract_id"]},
-                                   SIGNATURE_LEAD_DAYS.get(c["position"], 5))
+                    if c["released"]:   # otherwise the review release schedules the signature
+                        self._internal("legal.internal.signature_due", {"contract_id": c["contract_id"]},
+                                       SIGNATURE_LEAD_DAYS.get(c["position"], 5))
         self.log_event("legal.activity.deal_decision_recorded", f"{deal_id} {decision}", deal_id=deal_id,
                        decision=decision)
         return []
@@ -549,7 +602,7 @@ class LegalAgent(DepartmentAgent):
     def _on_signature_due(self, msg: Message) -> list[Message]:
         """Models the human authorised signatory executing the contract (agents never sign)."""
         c = self.state["contracts"].get(msg.body.get("contract_id", ""))
-        if not c or c["status"] != "awaiting_signature":
+        if not c or c["status"] != "awaiting_signature" or not c.get("released", True):
             self.log_event("legal.activity.signature_skipped", "no contract awaiting signature",
                            contract_id=msg.body.get("contract_id", ""))
             return []
@@ -571,6 +624,69 @@ class LegalAgent(DepartmentAgent):
         if c.get("engagement_id"):
             body["engagement_id"] = c["engagement_id"]
         return [self._pub("legal.contract_signed", body, reply_to=msg.id)]
+
+    # ------------------------------------------------------------------------------------------------
+    # General Counsel escalations (KPI gc_escalation_response_hours)
+    # ------------------------------------------------------------------------------------------------
+    def _raise_escalation(self, kind: str, ref: str) -> str:
+        """Record an escalation to the General Counsel and schedule the simulated decision.
+
+        The decision is modelled deterministically per sops.md SOP-LEGAL-02 step 4: the General Counsel
+        decides within GC_DECISION_HOURS (24 hours = 1 day). Breach decisions are measured against the 72-hour
+        clock instead and are not recorded here (kpis.md).
+        """
+        esc_id = self._next("ESC")
+        self.state["escalations"][esc_id] = {"escalation_id": esc_id, "kind": kind, "ref": ref,
+                                             "raised_day": self.clock.day, "decided_day": None}
+        self._internal("legal.internal.gc_decision_due", {"escalation_id": esc_id},
+                       GC_DECISION_HOURS // 24)
+        self.log_event("legal.activity.escalation_raised", f"{kind} {ref} escalated to General Counsel",
+                       escalation_id=esc_id, kind=kind, ref=ref)
+        return esc_id
+
+    def _on_gc_decision_due(self, msg: Message) -> list[Message]:
+        """Models the General Counsel (human) recording a decision on an escalation."""
+        esc = self.state["escalations"].get(msg.body.get("escalation_id", ""))
+        if not esc or esc["decided_day"] is not None:
+            return []
+        esc["decided_day"] = self.clock.day
+        hours = (self.clock.day - esc["raised_day"]) * 24
+        self.log_event("legal.activity.gc_decision_recorded", f"{esc['kind']} {esc['ref']} decided after {hours}h",
+                       escalation_id=esc["escalation_id"], hours=hours, kind=esc["kind"])
+        return []
+
+    # ------------------------------------------------------------------------------------------------
+    # data subject access requests (manual intake; no DSAR topic exists, sops.md SOP-LEGAL-13)
+    # ------------------------------------------------------------------------------------------------
+    def log_dsar_received(self, dsar_id: str = "") -> str:
+        """Manual intake: the human lawyer logs a DSAR in the register (logged as a legal activity event)."""
+        ref = dsar_id or self._next("DSAR")
+        self.state["dsars"][ref] = {"dsar_id": ref, "received_day": self.clock.day,
+                                    "deadline_day": self.clock.day + DSAR_DEADLINE_DAYS, "closed_day": None}
+        self.log_event("legal.activity.dsar_received", f"{ref} logged; due day "
+                       f"{self.clock.day + DSAR_DEADLINE_DAYS}", dsar_id=ref,
+                       deadline_day=self.clock.day + DSAR_DEADLINE_DAYS)
+        return ref
+
+    def log_dsar_closed(self, dsar_id: str) -> bool:
+        """Manual intake: the human lawyer closes a DSAR. Returns False for an unknown or closed request."""
+        rec = self.state["dsars"].get(dsar_id)
+        if not rec or rec["closed_day"] is not None:
+            return False
+        rec["closed_day"] = self.clock.day
+        on_time = self.clock.day <= rec["deadline_day"]
+        self.log_event("legal.activity.dsar_closed", f"{dsar_id} closed ({'on time' if on_time else 'late'})",
+                       dsar_id=dsar_id, on_time=on_time)
+        return True
+
+    def _dsar_watch(self) -> None:
+        """Weekly: flag open DSARs with DSAR_WARNING_DAYS or fewer remaining (sops.md SOP-LEGAL-13 step 5)."""
+        for ref, rec in sorted(self.state["dsars"].items()):
+            if rec["closed_day"] is None:
+                remaining = rec["deadline_day"] - self.clock.day
+                if remaining <= DSAR_WARNING_DAYS:
+                    self.log_event("legal.activity.dsar_deadline_warning", f"{ref}: {remaining} day(s) left",
+                                   dsar_id=ref, days_remaining=remaining, severity="high")
 
     # ------------------------------------------------------------------------------------------------
     # security terms, certifications
@@ -680,13 +796,18 @@ class LegalAgent(DepartmentAgent):
                  "client_name": b.get("client_name", ""), "amount_gbp": _to_int(b.get("amount_gbp")),
                  "service_line": "keep", "tier": b.get("tier", ""), "contract_type": "renewal",
                  "position": "standard", "status": "awaiting_signature", "approvals_pending": [],
-                 "drafted_day": self.clock.day, "signed_day": None, "warranties": [], "renewal": True}
+                 "drafted_day": self.clock.day, "requested_day": self.clock.day, "released": True,
+                 "released_day": None, "signed_day": None, "warranties": [], "renewal": True,
+                 "non_standard_liability": False, "review_task": ""}
             self.state["contracts"][cid] = c
         c["status"] = "awaiting_signature"
         if b.get("amount_gbp"):
             c["amount_gbp"] = _to_int(b.get("amount_gbp"))
         self.log_event("legal.activity.renewal_confirmed", f"{c['contract_id']} renewal confirmed",
                        contract_id=c["contract_id"], client_id=client_id)
+        if not c["released"]:
+            # client confirmed before the human review released the draft: the release schedules signature
+            return []
         return self._on_signature_due(self.bus.make_message("legal", "legal", "legal.internal.signature_due",
                                                             {"contract_id": c["contract_id"]},
                                                             sim_time=self.clock.day))
@@ -847,6 +968,7 @@ class LegalAgent(DepartmentAgent):
                 "severity": info["severity"], "policy_update_likely": info["policy_update_likely"],
                 "llm_note": note, "summary": f"{title}: {', '.join(info['impact_areas'])} "
                 f"(effective in {info['effective_in_days']} days)"}
+        self.state["triage_days"].append(max(0, self.clock.day - msg.sim_time))
         out = [self._pub("legal.regulatory_change_noted", body, reply_to=msg.id)]
         if info["severity"] in ("high", "critical"):
             fid = self._next("CF")
@@ -908,6 +1030,9 @@ class LegalAgent(DepartmentAgent):
         self.create_task(f"GC sign-off on AI risk review {review_id} ({info['risk_tier']})",
                          due_in_days=3, priority="high" if info["risk_tier"] in ("high_risk", "prohibited")
                          else "medium")
+        self.state["ai_reviews"][review_id] = {"requested_day": max(0, min(self.clock.day, msg.sim_time)),
+                                               "signoff_day": None}
+        self._internal("legal.internal.ai_signoff_due", {"review_id": review_id}, AI_SIGNOFF_DAYS)
         self.log_event("legal.activity.ai_risk_reviewed", f"{review_id} tier={info['risk_tier']}",
                        review_id=review_id, risk_tier=info["risk_tier"])
         return [self._pub("legal.ai_risk_review_completed", {
@@ -918,6 +1043,16 @@ class LegalAgent(DepartmentAgent):
             "high" if info["risk_tier"] in ("high_risk", "prohibited") else "low", "llm_note": note,
             "summary": f"AI risk review {review_id}: {info['risk_tier']}, {len(info['conditions'])} condition(s)"},
             reply_to=msg.id)]
+
+    def _on_ai_signoff_due(self, msg: Message) -> list[Message]:
+        """Models the General Counsel signing off the AI risk recommendation (stops the KPI clock)."""
+        rev = self.state["ai_reviews"].get(msg.body.get("review_id", ""))
+        if not rev or rev["signoff_day"] is not None:
+            return []
+        rev["signoff_day"] = self.clock.day
+        self.log_event("legal.activity.ai_risk_signed_off", f"{msg.body.get('review_id', '')} signed off by GC",
+                       days=self.clock.day - rev["requested_day"])
+        return []
 
     # ------------------------------------------------------------------------------------------------
     # collections and disputes
@@ -940,6 +1075,7 @@ class LegalAgent(DepartmentAgent):
         severity = "critical" if amount >= 500_000 else "high" if amount >= 100_000 else "medium"
         self.create_task(f"Dispute {matter_id}: legal hold, privilege protocol, GC strategy call",
                          due_in_days=1, priority="high")
+        self._raise_escalation("dispute", matter_id)
         return self._pub("legal.client_dispute_raised", {
             "matter_id": matter_id, "client_id": b.get("client_id", ""), "client_name": b.get("client_name", ""),
             "invoice_id": b.get("invoice_id", ""), "engagement_id": b.get("engagement_id", ""),
@@ -1128,19 +1264,51 @@ class LegalAgent(DepartmentAgent):
     # reporting
     # ------------------------------------------------------------------------------------------------
     def kpi_snapshot(self) -> list[Kpi]:
-        """KPIS with actuals computed from the agent's own state where it can (others stay None)."""
-        signed = [c for c in self.state["contracts"].values() if c["status"] == "signed"]
+        """KPIS with actuals derived from the event flow (a KPI with no data yet stays None; kpis.md)."""
+        contracts = list(self.state["contracts"].values())
+        signed = [c for c in contracts if c["status"] == "signed"]
         actual: dict[str, float] = {}
+
+        def mean(values: list[float]) -> float:
+            return sum(values) / len(values)
+
+        released = [c for c in contracts if c.get("released_day") is not None]
+        if released:
+            actual["contract_turnaround_days"] = mean([c["released_day"] - c["requested_day"] for c in released])
         if signed:
-            actual["deal_won_to_signed_days"] = sum(c["signed_day"] - c["drafted_day"] for c in signed) / len(signed)
             actual["playbook_adherence_pct"] = 100.0 * sum(
                 1 for c in signed if c["position"] != "escalated") / len(signed)
-        filed = [b for b in self.state["breaches"].values() if b["notifiable"]]
-        if filed:
+            actual["non_standard_liability_pct"] = 100.0 * sum(
+                1 for c in signed if c.get("non_standard_liability")) / len(signed)
+        # deal won day to signed day (new contracts only; renewals and change orders have no deal-won message)
+        won = [c for c in signed if c["contract_type"] in ("msa_sow", "keep_order_form")]
+        if won:
+            actual["deal_won_to_signed_days"] = mean([c["signed_day"] - c["requested_day"] for c in won])
+        decided = [e for e in self.state["escalations"].values() if e["decided_day"] is not None]
+        if decided:
+            actual["gc_escalation_response_hours"] = mean([(e["decided_day"] - e["raised_day"]) * 24.0
+                                                           for e in decided])
+        notifiable = [b for b in self.state["breaches"].values() if b["notifiable"]]
+        if notifiable:
             actual["breach_notification_within_72h_pct"] = 100.0 * sum(
-                1 for b in filed if b["filed"] and not b["breached_deadline"]) / len(filed)
+                1 for b in notifiable if b["filed"] and not b["breached_deadline"]) / len(notifiable)
+        if self.state["triage_days"]:
+            actual["regulatory_triage_days"] = mean(self.state["triage_days"])
+        signed_off = [r for r in self.state["ai_reviews"].values() if r["signoff_day"] is not None]
+        if signed_off:
+            actual["ai_risk_review_days"] = mean([r["signoff_day"] - r["requested_day"] for r in signed_off])
         if self.state["training"]:
             actual["compliance_training_completion_pct"] = min(self.state["training"].values())
+        # DSARs: closed on time, plus open requests already past the deadline, over requests due so far
+        dsars = list(self.state["dsars"].values())
+        due = [d for d in dsars if d["closed_day"] is not None or self.clock.day > d["deadline_day"]]
+        if due:
+            actual["dsar_on_time_pct"] = 100.0 * sum(
+                1 for d in due if d["closed_day"] is not None and d["closed_day"] <= d["deadline_day"]) / len(due)
+        # planned department cost over planned revenue (COMPANY.md §5.1, §5.4), not a ledger actual
+        fy = self._fiscal_year()
+        people, non_people = BUDGET_GBP[fy]
+        actual["legal_cost_pct_revenue"] = round(100.0 * (people + non_people) / REVENUE_GBP[fy], 1)
         return [Kpi(k.name, k.unit, k.target, actual.get(k.name), k.higher_is_better) for k in KPIS]
 
 

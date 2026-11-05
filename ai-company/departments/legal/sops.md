@@ -42,6 +42,9 @@ Topic coverage: every subscribed topic is named in the Trigger of at least one S
 | ICO notification deadline | 72 hours (`ICO_DEADLINE_HOURS`) from awareness | UK GDPR Art 33(1); COMPANY.md §9.3 |
 | Client (controller) breach notice standard | 48 hours (`CLIENT_BREACH_NOTICE_HOURS`) | Playbook |
 | Signature lead time | standard 3 days, fallback 5, escalated 5 (`SIGNATURE_LEAD_DAYS`) | Playbook |
+| Human review SLA before draft release | standard 3 days, fallback 2, escalated 2 (`REVIEW_SLA_DAYS`) | Playbook |
+| GC escalation decision | 24 hours (`GC_DECISION_HOURS`); AI risk sign-off 3 days (`AI_SIGNOFF_DAYS`) | Playbook |
+| DSAR deadline | one month, modelled as 30 days (`DSAR_DEADLINE_DAYS`); warning at 7 days or fewer (`DSAR_WARNING_DAYS`) | UK GDPR Art 12(3) |
 | Late payment interest | base rate 4.0% (`BASE_RATE_PCT`) + 8.0% (`LATE_PAYMENT_MARGIN_PCT`) | COMPANY.md §7; economics.md section 4 |
 | Late payment fixed compensation | £40 under £1,000; £70 from £1,000 to under £10,000; £100 from £10,000 | Late Payment Act 1998 |
 | Compliance training target | 95% (`TRAINING_TARGET_PCT`) | kpis.md |
@@ -76,8 +79,8 @@ Overall position of a contract = `escalated` if any clause escalates, else `fall
 2. [agent] Compare each supplied term with the playbook (table above) and compute the overall position (standard / fallback / escalated) and highest severity.
 3. [agent] Work out pending approvals: CEO if `amount_gbp` >= £500,000 and no approved decision; General Counsel and CEO if escalated and no approved decision; Board if `amount_gbp` > £1,500,000 and no Board approval flag.
 4. [agent] If the position is escalated and the deal has not yet been flagged, emit `legal.contract_risk_flagged` (blocking) before the draft.
-5. [agent] Emit `legal.contract_drafted` with `playbook_position`, `findings`, `approvals_required`, `billing_terms` (30/40/30 milestones with expenses at cost capped at 5% for Compass and Forge; monthly in advance with 12-month minimum for Keep; COMPANY.md §7), `human_review` level and `due_day` = today + signature lead time (3 / 5 / 5 days). Open a human review task due in 3 days (standard) or 2 days (fallback and escalated).
-6. [human] General Counsel reviews: sample check for standard paper under £500k; full review otherwise. Records approvals (fallback: General Counsel; escalated: General Counsel and CEO; payment terms 31 to 45: CFO and CEO).
+5. [agent] Prepare the draft with `playbook_position`, `findings`, `approvals_required`, `billing_terms` (30/40/30 milestones with expenses at cost capped at 5% for Compass and Forge; monthly in advance with 12-month minimum for Keep; COMPANY.md §7) and `human_review` level, and open a human review task due in 3 days (standard) or 2 days (fallback and escalated), the review SLA (`REVIEW_SLA_DAYS`).
+6. [human] General Counsel reviews: sample check for standard paper under £500k; full review otherwise. Records approvals (fallback: General Counsel; escalated: General Counsel and CEO; payment terms 31 to 45: CFO and CEO). On completing the review the General Counsel releases the draft; the agent models this as an internal confirmation after the review SLA and then emits `legal.contract_drafted` with `released_day`, `turnaround_days` and `due_day` = release day + signature lead time (3 / 5 / 5 days). This release is the end of the `contract_turnaround_days` clock.
 7. [agent] On `executive.deal_decision_made`, record the decision (`approved`, `rejected` or unclear). If approved, clear CEO/General Counsel approvals (a Board approval is only cleared by a `board_approved` flag); if rejected, cancel the contract.
 8. [human] When no approvals are pending the contract is `awaiting_signature`; the authorised signatory (a human, never the agent) executes it. The agent models this as an internal confirmation after the signature lead time.
 9. [agent] Emit `legal.contract_signed` with `signed_day`, `days_from_draft`, `signatories`, `billing_terms`, `payment_terms_days` = 30, `minimum_term_months` = 12 for Keep, and `work_may_start` = true. Finance builds the billing schedule from this and Delivery may kick off.
@@ -113,7 +116,7 @@ Overall position of a contract = `escalated` if any clause escalates, else `fall
 1. [agent] Store the `terms` against the `deal_id`, compute the playbook position per clause and overall position.
 2. [agent] Open a task "Pre-approval legal review of deal" due in 1 day (priority high).
 3. [agent] If any clause is `escalate` (uncapped liability, liability above 2.0x, `client_owns_all` IP, no DPA or non-standard data terms, other governing law, beyond net 45, Keep term under 12 months), emit `legal.contract_risk_flagged` with `blocking` true, `findings`, `required_approvers` and the recommendation "do not sign without General Counsel and CEO approval".
-4. [human] General Counsel reviews the flag within 24 hours and advises the CEO. Options: reject, accept with mitigation (for example liability super-cap, insurance backing, shorter term), or approve (General Counsel and CEO under COMPANY.md §9.3).
+4. [human] General Counsel reviews the flag within 24 hours (`GC_DECISION_HOURS`; the agent records the escalation and models the decision deterministically one day later, which feeds `gc_escalation_response_hours`; disputes are escalated the same way, breach decisions are excluded) and advises the CEO. Options: reject, accept with mitigation (for example liability super-cap, insurance backing, shorter term), or approve (General Counsel and CEO under COMPANY.md §9.3).
 5. [human] CEO records the decision through `executive.deal_decision_made`; Board approval is also required if the deal exceeds £1.5m (COMPANY.md §9.1, §9.3).
 6. [agent] Keep the position on the contract record so `playbook_adherence_pct` and `non_standard_liability_pct` can be computed.
 
@@ -450,7 +453,7 @@ Overall position of a contract = `escalated` if any clause escalates, else `fall
 2. [human] Ask IT Security, People and Sales to search systems; the Legal agent drafts the search request and tracks responses.
 3. [human] Review for third-party data and exemptions (legal privilege, confidential references); redact and send.
 4. [human] Extend by up to two months only for complexity or volume, and tell the requester within the first month.
-5. [agent] Weekly, list open DSARs by days remaining and flag any at 7 days or fewer.
+5. [agent] Weekly, list open DSARs by days remaining and flag any at 7 days or fewer. The agent keeps the register through `log_dsar_received` and `log_dsar_closed` (logged `legal.activity.dsar_received` / `dsar_closed` events) and computes `dsar_on_time_pct` from it.
 
 ### Outputs and messages
 

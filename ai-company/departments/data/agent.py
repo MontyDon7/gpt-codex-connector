@@ -110,6 +110,11 @@ PII_KEYS = ("email", "phone", "contact_email", "contact_phone", "address", "pass
 ISSUE_SLA_DAYS = {"critical": 1, "high": 2, "medium": 5, "low": 10}
 
 
+def fy_q_index(fiscal_year: int, quarter: int) -> int:
+    """Running quarter number (fiscal_year * 4 + quarter - 1), used to step quarters across year ends."""
+    return fiscal_year * 4 + quarter - 1
+
+
 def _num(value: object) -> Optional[float]:
     """Return value as float if it is a real number (not bool), else None."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -218,8 +223,7 @@ class DataAgent(DepartmentAgent):
                 or (prev_tick is not None and prev_tick < self.clock.day_of(quarter_start) <= today)):
             out.extend(self._quarterly_cadence())
         out.extend(self._crisis_check())
-        if (self.state["crisis_mode"] and self.state["events_seen"] > 0 and self.clock.every(7)
-                and not self.clock.is_month_start):
+        if self.state["crisis_mode"] and self.state["events_seen"] > 0 and self.clock.every(7):
             out.extend(self._publish_kpi_report(f"crisis-day-{self.clock.day}", "crisis_weekly"))
         return out
 
@@ -300,6 +304,15 @@ class DataAgent(DepartmentAgent):
                 problems.append(("uniqueness", f"duplicate {key} {body[key]}", "medium"))
             else:
                 seen.append(body[key])
+        if topic == "customer_success.health_score_updated" and body.get("score") not in (None, ""):
+            self.state["checks_run"] += 1
+            score = _num(body.get("score"))
+            lo, hi = HEALTH_SCORE_RANGE
+            if score is None:
+                problems.append(("validity", "non-numeric score (not a number)", "medium"))
+            elif not lo <= score <= hi:
+                self.state["health_out_of_range"] += 1
+                problems.append(("validity", f"score out of range {lo:.0f} to {hi:.0f}: {score:g}", "medium"))
         out: list[Message] = []
         for check, detail, severity in problems:
             self.state["checks_failed"] += 1
@@ -315,13 +328,12 @@ class DataAgent(DepartmentAgent):
         self.state["issue_keys"].append(issue_key)
         self.state["issues_raised"] += 1
         issue_id = f"DQ-{self.state['issues_raised']:04d}"
-        msg = self.emit("data.data_quality_issue_raised", {
+        return self._emit_to_subscribers("data.data_quality_issue_raised", {
             "issue_id": issue_id, "severity": severity, "check": check, "dataset": message.topic,
             "source_message_id": message.id, "source_department": message.sender,
             "department": message.sender, "due_day": self.clock.day + ISSUE_SLA_DAYS[severity],
             "summary": f"{check} check failed on {message.topic}: {detail}",
         })
-        return [msg]
 
     # -------------------------------------------------------------- metrics
     def _decisions(self) -> int:
@@ -381,8 +393,8 @@ class DataAgent(DepartmentAgent):
         reg = s["agent_register"]
         evaluated = sum(1 for a in reg.values() if a.get("status") != "under_review")
         actual = {
-            "kpi_report_on_time_rate": (round(100.0 * s["reports_on_time"] / s["reports_published"], 2)
-                                        if s["reports_published"] else None),
+            "kpi_report_on_time_rate": (round(100.0 * s["reports_on_time"] / s["monthly_reports_published"], 2)
+                                        if s["monthly_reports_published"] else None),
             "data_quality_pass_rate": self._dq_pass_rate(),
             "forecast_mape_bookings": self._mape() if len(s["mape_samples"]) >= 4 else None,
             "agent_eval_coverage": round(100.0 * evaluated / len(reg), 2) if reg else None,
@@ -396,12 +408,12 @@ class DataAgent(DepartmentAgent):
             return []
         self.state["reported_periods"].append(period)
         self.state["reports_published"] += 1
-        if self.clock.date.day <= 5 or reason == "month_end_closed":
-            self.state["reports_on_time"] += 1
+        if reason in MONTHLY_REPORT_REASONS:
+            self._measure_timeliness(period)
         m = self.metrics()
         narrative = self.ask_llm(f"Summarise the firm KPI report for {period}: pipeline "
                                  f"{m['open_pipeline_gbp']} GBP, bookings {m['bookings_gbp']} GBP.")
-        msg = self.emit("data.kpi_report_published", {
+        return self._emit_to_subscribers("data.kpi_report_published", {
             "report_id": f"KR-{self.state['reports_published']:04d}", "period": period, "reason": reason,
             "metrics": m,
             "kpis": [{"name": k.name, "target": k.target, "actual": k.actual} for k in self.kpi_actuals()],
@@ -412,7 +424,24 @@ class DataAgent(DepartmentAgent):
                         f"collected GBP {m['collected_gbp']:,.0f}, active engagements "
                         f"{m['active_engagements']}"),
         })
-        return [msg]
+
+    def _measure_timeliness(self, period: str) -> None:
+        """kpis.md: a monthly report is on time if published by working day 3 of the month after its period."""
+        self.state["monthly_reports_published"] += 1
+        deadline = self._deadline_of_period(period)
+        on_time = deadline is None or self.clock.date <= deadline
+        if on_time:
+            self.state["reports_on_time"] += 1
+            self.state["report_turnaround_breach"] = False
+            return
+        self.state["late_reports"] += 1
+        self.state["report_turnaround_breach"] = True
+        wd = self._working_days_in_month_to(self.clock.date)
+        self.log_event("data.activity.report_late",
+                       f"KPI report {period} published on working day {wd}, deadline working day "
+                       f"{REPORT_DEADLINE_WD}", period=period, working_day=wd)
+        self.create_task(f"Late KPI report {period}: tell the CEO and Finance head the cause and revised date",
+                         due_in_days=1, priority="high")
 
     def _score_forecasts(self) -> None:
         """Score every forecast whose 90-day window has fully elapsed (absolute percentage error)."""
@@ -442,19 +471,34 @@ class DataAgent(DepartmentAgent):
         self.state["forecasts_published"] += 1
         self.state["forecast_history"].append({"day": self.clock.day, "forecast_gbp": forecast})
         open_deals = len(self.state["open_pipeline"])
-        msg = self.emit("data.forecast_updated", {
+        expected_new = round(open_deals * (wr or 0.0), 2)
+        active = len(self.state["active_engagements"])
+        receivables = round(self.state["invoiced_gbp"] - self.state["collected_gbp"], 2)
+        # Revenue forecast: Keep ARR over the horizon plus the recognised share of forecast new bookings.
+        keep_rev = round(self.state["keep_arr_gbp"] * FORECAST_HORIZON_DAYS / 365.0, 2)
+        project_rev = round(forecast * REVENUE_RECOGNITION_SHARE_90D, 2)
+        revenue = round(keep_rev + project_rev, 2)
+        # Capacity forecast: delivery FTE needed for current plus expected engagements, at target utilisation.
+        demand_fte = round((active + expected_new) * FTE_PER_ENGAGEMENT, 2)
+        required_hc = round(demand_fte / BILLABLE_UTILISATION, 2)
+        return self._emit_to_subscribers("data.forecast_updated", {
             "forecast_id": f"FC-{self.state['forecasts_published']:04d}", "reason": reason,
             "horizon_days": FORECAST_HORIZON_DAYS, "open_pipeline_gbp": round(pipeline, 2),
             "win_rate_used": round(wr or 0.0, 4), "basis": "observed" if observed else "planning",
             "forecast_bookings_gbp": forecast, "low_gbp": round(forecast * (1 - band), 2),
             "high_gbp": round(forecast * (1 + band), 2), "mape_pct": mape,
-            "expected_new_engagements": round(open_deals * (wr or 0.0), 2),
-            "active_engagements": len(self.state["active_engagements"]),
-            "outstanding_receivables_gbp": round(self.state["invoiced_gbp"] - self.state["collected_gbp"], 2),
+            "expected_new_engagements": expected_new, "active_engagements": active,
+            "outstanding_receivables_gbp": receivables,
+            "forecast_revenue_gbp": revenue, "forecast_revenue_low_gbp": round(revenue * (1 - band), 2),
+            "forecast_revenue_high_gbp": round(revenue * (1 + band), 2),
+            "keep_revenue_gbp": keep_rev, "project_revenue_gbp": project_rev,
+            "forecast_cash_inflow_gbp": max(0.0, receivables),
+            "capacity_demand_fte": demand_fte, "capacity_required_headcount": required_hc,
             "summary": (f"90-day bookings forecast GBP {forecast:,.0f} from pipeline GBP {pipeline:,.0f} "
-                        f"at {(wr or 0.0):.0%} win rate"),
+                        f"at {(wr or 0.0):.0%} win rate; revenue GBP {revenue:,.0f}; delivery demand "
+                        f"{demand_fte:.1f} FTE ({required_hc:.1f} headcount at "
+                        f"{BILLABLE_UTILISATION:.0%} utilisation)"),
         })
-        return [msg]
 
     def _publish_agent_report(self, reason: str, agent: Optional[str] = None,
                               outcome: Optional[str] = None) -> list[Message]:
@@ -466,32 +510,85 @@ class DataAgent(DepartmentAgent):
             "agents_registered": len(reg), "agents_evaluated": evaluated, "coverage_pct": coverage,
             "under_review": sorted(n for n, a in reg.items() if a.get("status") == "under_review"),
             "rejected": sorted(n for n, a in reg.items() if a.get("status") == "rejected"),
-            "summary": f"Agent quality report ({reason}): {evaluated} of {len(reg)} agents evaluated",
+            "summary": f"Agent quality report ({reason}): {evaluated} of {len(reg)} agents evaluated"
+                       + (" (register empty)" if not reg else ""),
         }
         if agent:
             body["agent"] = agent
             body["outcome"] = outcome
         self.state["agent_reports"] = self.state.get("agent_reports", 0) + 1
-        return [self.emit("data.agent_quality_report_published", body)]
+        return self._emit_to_subscribers("data.agent_quality_report_published", body)
 
     def _quarterly_cadence(self) -> list[Message]:
-        """Quarterly: agent quality report, access review and retention review tasks, hiring requests."""
+        """Quarterly: agent quality report (also when the register is empty), access and retention review
+        tasks, and hiring requests one quarter before each planned start."""
         out: list[Message] = []
-        month = self.clock.date.month
-        quarter = (month - 1) // 3 + 1
-        if self.state["agent_register"]:
-            out.extend(self._publish_agent_report("quarterly"))
+        quarter = self._fiscal_quarter_of(self.clock.date)
+        out.extend(self._publish_agent_report("quarterly"))
         self.create_task(f"Complete FY quarter {quarter} access review and client-data segregation test",
                          due_in_days=30, priority="high")
         self.create_task("Review retention schedule and delete expired datasets", due_in_days=30)
-        for role, level, start in HIRING_REQUESTS.get((self.clock.year_index, quarter), ()):
-            key = f"{role}|{start}"
-            if key in self.state["hire_requests_sent"]:
+        due_index = fy_q_index(self._fiscal_year_of(self.clock.date), quarter)
+        for slot, (role, level, s_fy, s_q, _trigger) in enumerate(HIRING_PLAN):
+            if fy_q_index(s_fy, s_q) - 1 != due_index or slot in self.state["hire_slots_requested"]:
                 continue
-            self.state["hire_requests_sent"].append(key)
-            out.append(self.emit("data.hire_requested", {
+            self.state["hire_slots_requested"].append(slot)
+            self.state["hire_requests_sent"].append(f"{role}|FY{s_fy} Q{s_q}")
+            out.extend(self._emit_to_subscribers("data.hire_requested", {
+                "department": "data", "role": role, "level": level, "count": 1,
+                "start_quarter": f"FY{s_fy} Q{s_q}", "out_of_cycle": False,
+                "summary": f"Data requests {role} to start FY{s_fy} Q{s_q} (blueprint hiring plan)",
+            }))
+        return out
+
+    def _update_dq_streak(self) -> None:
+        rate = self._dq_pass_rate()
+        if rate is not None and rate < DQ_PASS_RATE_FLOOR:
+            self.state["dq_below_streak"] += 1
+        else:
+            self.state["dq_below_streak"] = 0
+
+    def _out_of_cycle_hires(self) -> list[Message]:
+        """sops.md SOP-DATA-07: blueprint triggers hit early raise the next planned role out of cycle, but only
+        inside the COMPANY.md 6.1 headcount plan (1 / 3 / 9 humans at year end)."""
+        s = self.state
+        fired = {
+            FEEDS_OR_DQ: (len(s["feed_topics"]) > MAX_SOURCE_FEEDS
+                          or s["dq_below_streak"] >= DQ_BREACH_MONTHS,
+                          f"{len(s['feed_topics'])} source feeds, data quality streak {s['dq_below_streak']}"),
+            REPORT_TURNAROUND: (bool(s["report_turnaround_breach"]), "KPI report turnaround above 3 working days"),
+        }
+        cur_fy = self._fiscal_year_of(self.clock.date)
+        cur_q = self._fiscal_quarter_of(self.clock.date)
+        next_idx = fy_q_index(cur_fy, cur_q) + 1
+        out: list[Message] = []
+        done_triggers: set[str] = set()
+        for slot, (role, level, s_fy, s_q, trigger) in enumerate(HIRING_PLAN):
+            if trigger is None or trigger in done_triggers or slot in s["hire_slots_requested"]:
+                continue
+            done_triggers.add(trigger)
+            hit, why = fired[trigger]
+            if not hit or fy_q_index(s_fy, s_q) <= next_idx:
+                continue            # not breached, or the calendar request is already due or past
+            start_fy, start_q = next_idx // 4, next_idx % 4 + 1
+            humans_cap = HEADCOUNT[max(1, min(3, start_fy - FIRST_FISCAL_YEAR + 1))][0]
+            if 1 + len(s["hire_slots_requested"]) + 1 > humans_cap:
+                key = f"{slot}|{self.clock.date.year}-{self.clock.date.month:02d}"
+                if key not in s["hire_blocked_keys"]:
+                    s["hire_blocked_keys"].append(key)
+                    self.log_event("data.activity.hire_blocked_by_plan",
+                                   f"out-of-cycle {role} blocked: {humans_cap} humans planned for FY{start_fy}",
+                                   role=role, trigger=why)
+                continue
+            s["hire_slots_requested"].append(slot)
+            s["out_of_cycle_hires"] += 1
+            start = f"FY{start_fy} Q{start_q}"
+            s["hire_requests_sent"].append(f"{role}|{start}")
+            self.create_task(f"Seek CEO approval for out-of-cycle {role} ({why})", due_in_days=5, priority="high")
+            out.extend(self._emit_to_subscribers("data.hire_requested", {
                 "department": "data", "role": role, "level": level, "count": 1, "start_quarter": start,
-                "summary": f"Data requests {role} to start {start} (blueprint hiring plan)",
+                "out_of_cycle": True, "trigger": why,
+                "summary": f"Data requests {role} to start {start}, ahead of plan: {why}",
             }))
         return out
 
@@ -604,7 +701,8 @@ class DataAgent(DepartmentAgent):
 
     def _on_health_score(self, m: Message) -> list[Message]:
         score, client = _num(m.body.get("score")), m.body.get("client_id")
-        if client and score is not None:
+        lo, hi = HEALTH_SCORE_RANGE
+        if client and score is not None and lo <= score <= hi:
             self.state["health"][client] = score
         return []
 
@@ -643,17 +741,17 @@ class DataAgent(DepartmentAgent):
 
     def _on_budget_cycle_opened(self, m: Message) -> list[Message]:
         fy = m.body.get("fiscal_year")
-        year_idx = fy - 2025 if isinstance(fy, int) else self.clock.year_index + 1
+        year_idx = (fy - FIRST_FISCAL_YEAR + 1 if isinstance(fy, int)
+                    else self._fiscal_year_of(self.clock.date) - FIRST_FISCAL_YEAR + 2)
         year_idx = max(1, min(3, year_idx))
         people, non_people = BUDGET_GBP[year_idx]
         humans, agents = HEADCOUNT[year_idx]
-        msg = self.emit("data.budget_submitted", {
+        return self._emit_to_subscribers("data.budget_submitted", {
             "department": "data", "budget_cycle_id": m.body.get("budget_cycle_id", f"BUD-{2025 + year_idx}"),
             "amount_gbp": people + non_people, "people_gbp": people, "non_people_gbp": non_people,
             "headcount_humans": humans, "headcount_agents": agents,
             "summary": f"Data budget FY{2025 + year_idx}: GBP {people + non_people:,} (COMPANY.md 5.4)",
         })
-        return [msg]
 
     def _on_budget_approved(self, m: Message) -> list[Message]:
         self.state["approved_budget"] = self._scrub_dict(m.body)[0]
@@ -665,9 +763,33 @@ class DataAgent(DepartmentAgent):
 
     def _on_crisis_declared(self, m: Message) -> list[Message]:
         self.state["crisis_mode"] = True
-        self.create_task("Crisis mode: weekly KPI snapshots and daily cash and pipeline checks",
-                         due_in_days=1, priority="critical")
+        self.state["crisis_started_day"] = m.sim_time
+        task = self.tasks.get(self.state["crisis_task_id"] or "")
+        if task is None or task.status in ("done", "cancelled"):
+            self.state["crisis_task_id"] = self.create_task(
+                "Crisis mode: weekly KPI snapshots and daily cash and pipeline checks; mark done to end "
+                "crisis reporting", due_in_days=1, priority="critical").id
         return self._publish_kpi_report(f"crisis-day-{m.sim_time}", "crisis_declared")
+
+    def _crisis_check(self) -> list[Message]:
+        """End crisis mode (no executive.crisis_cleared topic exists): the Chief Data and AI Officer closes the
+        crisis task, or CRISIS_MAX_DAYS elapse after the declaration and a review task is raised."""
+        s = self.state
+        if not s["crisis_mode"]:
+            return []
+        task = self.tasks.get(s["crisis_task_id"] or "")
+        if task is not None and task.status in ("done", "cancelled"):
+            how = "crisis task closed"
+        elif self.clock.day - (s["crisis_started_day"] or 0) >= CRISIS_MAX_DAYS:
+            how = f"timeout after {CRISIS_MAX_DAYS} days"
+            self.create_task("Crisis reporting timed out: confirm with the CEO and Finance head that the crisis "
+                             "is over or re-declare", due_in_days=3, priority="high")
+        else:
+            return []
+        s["crisis_mode"] = False
+        s["crises_closed"] += 1
+        self.log_event("data.activity.crisis_closed", f"crisis reporting ended: {how}", how=how)
+        return self._publish_kpi_report(f"crisis-closed-day-{self.clock.day}", "crisis_closed")
 
     def _on_okrs_set(self, m: Message) -> list[Message]:
         self.state["okrs"] = self._scrub_dict(m.body)[0]
@@ -714,14 +836,13 @@ class DataAgent(DepartmentAgent):
         self.state["market"][indicator] = m.body.get("value")
         self.state["benchmarks"] += 1
         wr, dso = self._win_rate(), self._dso()
-        msg = self.emit("data.benchmark_ready", {
+        return self._emit_to_subscribers("data.benchmark_ready", {
             "benchmark_id": f"BM-{self.state['benchmarks']:04d}", "indicator": indicator,
             "market_value": m.body.get("value"), "period": m.body.get("period"),
             "internal_win_rate": round(wr, 4) if wr is not None else None, "internal_dso_days": dso,
             "min_cohort_size": 5,
             "summary": f"Benchmark {indicator} refreshed from external market data",
         })
-        return [msg]
 
 
 def build_agent(llm, bus, clock, log) -> DataAgent:
