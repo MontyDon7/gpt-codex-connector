@@ -4,10 +4,10 @@ Department: `it_security` (agent class `ItSecurityAgent`). Head: Chief Informati
 
 Common conventions used in every SOP:
 - Severity scale (body key `severity`): `low`, `medium`, `high`, `critical`. Critical = confirmed compromise of client data, domain-admin or production control plane, or loss of the Slack/Google Workspace tenant. High = confirmed compromise of a single privileged identity, ransomware precursor, or exploited internet-facing vulnerability. Medium = contained phishing click, malware on a managed laptop. Low = policy deviation, blocked attack.
-- Roles: CISO (Wei Zhang), Security and IT Operations Lead (human, Y1 hire), Security Analyst (human, Y2 hire), GRC Manager (human, Y2 hire). AI agents: `ItSecurityAgent` (triage, evidence, workflow) and the Access Governance agent (joiner/mover/leaver and access reviews), both registered in the agent register (COMPANY.md §9.4). Until Y2 hires land, the CISO and Security and IT Operations Lead cover all [human] steps; the CISO is the named escalation owner throughout.
+- Roles: CISO (Wei Zhang), Security and IT Operations Specialist (human, in post from Q1 FY2026), Senior Security Specialist (Engineering) (human, from Q2 FY2027), GRC Lead (human, from Q2 FY2027); titles as in `blueprint.md` section 3. AI agents: `ItSecurityAgent` (triage, evidence, workflow) and the Access Lifecycle Agent (joiner/mover/leaver execution), both registered in the agent register (COMPANY.md §9.4). Until the FY2027 hires land, the CISO and Security and IT Operations Specialist cover all [human] steps, with the CISO covering the Senior Security Specialist (Engineering) and GRC Lead duties; the CISO is the named escalation owner throughout.
 - Agents may draft, analyse, monitor and propose. Agents may not notify regulators, sign contracts, approve payments above £10,000 or make final hiring or termination decisions (COMPANY.md §9.4). Every SOP step that would cross that line is marked [human].
 - Time is measured in simulation days for message scheduling (`delay_days`) and in business hours/clock hours in SLAs. "Clock hours" ignore weekends; "business hours" are 09:00-17:30 UK.
-- Evidence for every SOP is stored in the ISMS evidence register (ticket id, date, approver) and sampled quarterly by the GRC Manager for ISO 27001 internal audit.
+- Evidence for every SOP is stored in the ISMS evidence register (ticket id, date, approver) and sampled quarterly by the GRC Lead for ISO 27001 internal audit.
 
 ## Overview
 
@@ -16,27 +16,27 @@ Common conventions used in every SOP:
 | SOP-IT_SECURITY-01 | Security alert triage and incident declaration | `external.security_alert` | CISO | Triage in 30 min (critical/high), 4 clock hours (medium), 1 business day (low); declaration decision in 1 hour |
 | SOP-IT_SECURITY-02 | Personal data breach assessment and regulator liaison | `legal.regulator_notification_filed` (follows `it_security.data_breach_confirmed`) | CISO with General Counsel | Breach assessment in 12 clock hours; ICO notification by Legal within 72 hours of awareness; closure report in 10 business days |
 | SOP-IT_SECURITY-03 | Crisis mode response | `executive.crisis_declared` | CISO | Crisis bridge open in 30 min; first situation report in 2 hours; then every 4 hours |
-| SOP-IT_SECURITY-04 | Joiner and contractor access provisioning | `people.new_hire_started`, `people.contractor_engaged` | Security and IT Operations Lead | Laptop and baseline access ready before day 1 09:00; contractor access in 2 business days |
-| SOP-IT_SECURITY-05 | Leaver access revocation | `people.employee_left` | Security and IT Operations Lead | Privileged accounts disabled in 1 hour, all access in 4 hours of last working time; verified in 1 business day |
-| SOP-IT_SECURITY-06 | Vulnerability intake, triage and release security gate | `product.release_shipped`, `product.vulnerability_fixed` | Security Analyst (CISO until hired) | Critical 48 hours, high 7 days, medium 30 days, low 90 days to remediate; verify fix in 2 business days |
-| SOP-IT_SECURITY-07 | Customer security questionnaire and security review | `sales.security_review_requested` | GRC Manager (CISO until hired) | Standard questionnaire 3 business days; bespoke or on-site review 10 business days |
-| SOP-IT_SECURITY-08 | Third-party and AI vendor risk assessment | `operations.vendor_review_requested`, `operations.vendor_approved` | GRC Manager (CISO until hired) | Tier 1: 10 business days; Tier 2: 5 business days; Tier 3: 2 business days; onboarding controls verified in 5 business days of approval |
-| SOP-IT_SECURITY-09 | Certification and compliance programme | `legal.regulatory_change_noted`, `legal.policy_update_published`, `people.compliance_training_completed`, `operations.continuity_test_completed` | GRC Manager (CISO until hired) | Regulatory impact assessment in 10 business days; policy attestation 95% in 30 days; certification status published monthly |
+| SOP-IT_SECURITY-04 | Joiner and contractor access provisioning | `people.new_hire_started`, `people.contractor_engaged` | Security and IT Operations Specialist | Laptop and baseline access ready before day 1 09:00; contractor access in 2 business days |
+| SOP-IT_SECURITY-05 | Leaver access revocation | `people.employee_left` | Security and IT Operations Specialist | Privileged accounts disabled in 1 hour, all access in 4 hours of last working time; verified in 1 business day |
+| SOP-IT_SECURITY-06 | Vulnerability intake, triage and release security gate | `product.release_shipped`, `product.vulnerability_fixed` | Senior Security Specialist (Engineering) (CISO until hired) | Critical 7 days (24 hours if actively exploited), high 30 days, medium 60 days, low 90 days to remediate; verify fix in 2 business days |
+| SOP-IT_SECURITY-07 | Customer security questionnaire and security review | `sales.security_review_requested` | GRC Lead (CISO until hired) | Standard questionnaire 3 business days; bespoke or on-site audit request 4 business days |
+| SOP-IT_SECURITY-08 | Third-party and AI vendor risk assessment | `operations.vendor_review_requested`, `operations.vendor_approved` | GRC Lead (CISO until hired) | Tier 1: 10 business days; Tier 2: 5 business days; Tier 3: 2 business days; onboarding controls verified in 5 business days of approval |
+| SOP-IT_SECURITY-09 | Certification and compliance programme | `legal.regulatory_change_noted`, `legal.policy_update_published`, `people.compliance_training_completed`, `operations.continuity_test_completed` | GRC Lead (CISO until hired) | Regulatory impact assessment in 10 business days; policy attestation 95% in 30 days; certification status published monthly |
 | SOP-IT_SECURITY-10 | AI agent register and credential governance | `product.ai_risk_review_requested` | CISO | Security review in 5 business days; credential rotation 90 days; quarterly register review |
 | SOP-IT_SECURITY-11 | Annual budget cycle and department planning | `finance.budget_cycle_opened`, `executive.budget_approved`, `executive.okrs_set`, `executive.strategy_updated` | CISO | Budget submitted by finance deadline; plan re-baselined in 10 business days of approval |
 | SOP-IT_SECURITY-12 | Security hiring request | Capacity trigger (schedule: monthly review) | CISO | Request raised within 5 business days of trigger breach |
 
 ## SOP-IT_SECURITY-01: Security alert triage and incident declaration
 
-**Owner:** CISO (Wei Zhang); on-call rota: Security and IT Operations Lead then CISO.
-**Trigger:** `external.security_alert` (sender `external`). Sources: Google Workspace alert centre, endpoint detection and response (EDR) console, cloud audit log detections, phishing mailbox reports, a client or the NCSC reporting a concern, threat-intelligence feeds.
-**Inputs:** alert body (`summary`, `severity`, optional `client_id`, `asset`, `source`, `indicator`), asset inventory, identity logs, EDR telemetry, current client engagement list (to learn whether client data is in scope).
+**Owner**: CISO (Wei Zhang); on-call rota: Security and IT Operations Specialist then CISO.
+**Trigger**: `external.security_alert` (sender `external`). Sources: Google Workspace alert centre, endpoint detection and response (EDR) console, cloud audit log detections, phishing mailbox reports, a client or the NCSC reporting a concern, threat-intelligence feeds.
+**Inputs**: alert body (`summary`, `severity`, optional `client_id`, `asset`, `source`, `indicator`), asset inventory, identity logs, EDR telemetry, current client engagement list (to learn whether client data is in scope).
 
 ### Steps
 1. [agent] Ingest the alert, deduplicate against open incidents using asset plus indicator, and create a ticket `INC-<year>-<seq>` with initial severity from the alert body.
 2. [agent] Enrich: pull last 24 hours of sign-ins for the identity, EDR process tree for the host, mailbox rule changes, and cloud audit events; attach to the ticket.
 3. [agent] Classify against the playbook library (phishing, credential compromise, malware, exposed secret, data exposure, vulnerability exploitation, availability/denial of service, insider misuse, third-party/supplier incident). Propose a severity and recommended containment.
-4. [human] Security and IT Operations Lead validates the classification within the triage SLA, confirms or changes severity, and records the decision.
+4. [human] Security and IT Operations Specialist validates the classification within the triage SLA, confirms or changes severity, and records the decision.
 5. [human] If true positive at medium or above, contain: isolate host via EDR, disable or reset the identity and revoke refresh tokens and API keys, block the indicator at the mail gateway and DNS filter. Containment is logged with timestamp and operator.
 6. [human] Declare an incident when any of: confirmed unauthorised access, malware execution on a managed asset, any exposure of client or personal data, or severity high or critical. Name the incident commander (CISO by default) and open a private incident channel.
 7. [agent] On declaration, emit `it_security.incident_detected` to the leadership and operational audience; for client data in scope set `client_id` so Customer Success and Delivery can brief the engagement lead. Start the incident timeline and decision log.
@@ -58,15 +58,15 @@ Common conventions used in every SOP:
 
 ### Exceptions and escalation
 - Alert cannot be validated within SLA: escalate to the CISO, who may declare provisionally. A provisional declaration is downgraded within 24 hours if disproved.
-- CISO unavailable: the Security and IT Operations Lead acts as incident commander and informs the CEO; if both unavailable, the Chief Operating Officer holds authority to isolate systems.
+- CISO unavailable: the Security and IT Operations Specialist acts as incident commander and informs the CEO; if both unavailable, the Chief Operating Officer holds authority to isolate systems.
 - Alert involves a person (insider): inform General Counsel and Chief People Officer before any employee-facing action; no unilateral disciplinary steps.
 - Alert involves an AI agent: suspend the agent credentials immediately under SOP-IT_SECURITY-10 and notify the accountable human owner.
 
 ## SOP-IT_SECURITY-02: Personal data breach assessment and regulator liaison
 
-**Owner:** CISO, jointly with the General Counsel (Callum Fraser). The CEO approves notification content per the delegation of authority (COMPANY.md §9.3).
-**Trigger:** An incident under SOP-IT_SECURITY-01 where personal data may be affected; this SOP then produces `it_security.data_breach_confirmed`. The inbound trigger topic for the closing phase is `legal.regulator_notification_filed` (sender `legal`, recipients include `it_security`).
-**Inputs:** incident ticket, data map and record of processing activities (RoPA), affected client contracts and data processing agreements (DPA), client contact list, forensic findings, Legal's draft ICO notification.
+**Owner**: CISO, jointly with the General Counsel (Callum Fraser). The CEO approves notification content per the delegation of authority (COMPANY.md §9.3).
+**Trigger**: An incident under SOP-IT_SECURITY-01 where personal data may be affected; this SOP then produces `it_security.data_breach_confirmed`. The inbound trigger topic for the closing phase is `legal.regulator_notification_filed` (sender `legal`, recipients include `it_security`).
+**Inputs**: incident ticket, data map and record of processing activities (RoPA), affected client contracts and data processing agreements (DPA), client contact list, forensic findings, Legal's draft ICO notification.
 
 ### Steps
 1. [human] Within 12 clock hours of awareness, the CISO and General Counsel establish the facts: what personal data, whose (client employees, candidates, our staff), how many data subjects, how it was exposed, whether it was encrypted, whether exposure is ongoing.
@@ -97,9 +97,9 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-03: Crisis mode response
 
-**Owner:** CISO (technical lead); Crisis commander is the CEO (Imogen Hartley).
-**Trigger:** `executive.crisis_declared` (broadcast by the Executive department).
-**Inputs:** crisis declaration body (`summary`, `severity`, scope), open incident register, business continuity plan, system recovery priorities, privileged access inventory.
+**Owner**: CISO (technical lead); Crisis commander is the CEO (Imogen Hartley).
+**Trigger**: `executive.crisis_declared` (broadcast by the Executive department).
+**Inputs**: crisis declaration body (`summary`, `severity`, scope), open incident register, business continuity plan, system recovery priorities, privileged access inventory.
 
 ### Steps
 1. [agent] On receipt, freeze non-essential change: block merges to protected infrastructure branches, pause scheduled access reviews and low-priority vendor assessments, and notify the on-call rota.
@@ -119,14 +119,14 @@ Common conventions used in every SOP:
 - Controls: break-glass use reviewed within 1 business day; every emergency change retro-approved by the CISO in the change log within 2 business days; access granted during crisis expires automatically.
 
 ### Exceptions and escalation
-- CISO unreachable for 30 minutes: the Security and IT Operations Lead assumes command and the COO is informed.
+- CISO unreachable for 30 minutes: the Security and IT Operations Specialist assumes command and the COO is informed.
 - Crisis declared for a non-security cause (for example a supplier outage or a regulatory event): the department switches to supporting role: protect identity and data, run the situation report and do not initiate new security change.
 
 ## SOP-IT_SECURITY-04: Joiner and contractor access provisioning
 
-**Owner:** Security and IT Operations Lead (Access Governance agent drafts and executes the low-risk steps).
-**Trigger:** `people.new_hire_started` (employees) and `people.contractor_engaged` (contractors, associates, and subcontracted consultants).
-**Inputs:** message body (`employee_id` or `contractor_id`, `role`, `department`, `start_day`, `manager`, `engagement_end_day` for contractors), role-based access control (RBAC) matrix, device stock, onboarding checklist from People and Operations.
+**Owner**: Security and IT Operations Specialist (the Access Lifecycle Agent drafts and executes the low-risk steps).
+**Trigger**: `people.new_hire_started` (employees) and `people.contractor_engaged` (contractors, associates, and subcontracted consultants).
+**Inputs**: message body (`employee_id` or `contractor_id`, `role`, `department`, `start_day`, `manager`, `engagement_end_day` for contractors), role-based access control (RBAC) matrix, device stock, onboarding checklist from People and Operations.
 
 ### Steps
 1. [agent] Look up the role in the RBAC matrix and generate the access bundle: baseline (email, calendar, chat, document store, password manager, MFA enrolment), departmental applications, and client workspaces only where the manager names the engagement.
@@ -153,9 +153,9 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-05: Leaver access revocation
 
-**Owner:** Security and IT Operations Lead (Access Governance agent executes).
-**Trigger:** `people.employee_left` (body includes `employee_id`, `last_day`, `reason_category`, `involuntary` flag).
-**Inputs:** leaver record, account and device inventory, application owner list, shared mailbox and delegated access list, open tickets assigned to the leaver.
+**Owner**: Security and IT Operations Specialist (the Access Lifecycle Agent executes).
+**Trigger**: `people.employee_left` (body includes `employee_id`, `last_day`, `reason_category`, `involuntary` flag).
+**Inputs**: leaver record, account and device inventory, application owner list, shared mailbox and delegated access list, open tickets assigned to the leaver.
 
 ### Steps
 1. [agent] Compile the leaver's access inventory across identity provider, SaaS applications, source code hosting, cloud consoles, password manager vaults, shared drives and API tokens owned by the person.
@@ -172,7 +172,7 @@ Common conventions used in every SOP:
 
 ### SLA and controls
 - Privileged accounts disabled within 1 hour and all access within 4 hours of last working time; verification within 1 business day; `access_revoked` within 1 hour of verification.
-- Controls: monthly reconciliation of HR leavers against active accounts (target zero orphan accounts); quarterly sample of 10 leavers by the GRC Manager; ISO 27001 Annex A.5.11 and A.6.5.
+- Controls: monthly reconciliation of HR leavers against active accounts (target zero orphan accounts); quarterly sample of 10 leavers by the GRC Lead; ISO 27001 Annex A.5.11 and A.6.5.
 
 ### Exceptions and escalation
 - Notice given ahead of last day: apply reduced-access ("garden leave") profile on the day notice is given where the person holds privileged or client access.
@@ -181,18 +181,18 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-06: Vulnerability intake, triage and release security gate
 
-**Owner:** Security Analyst from FY2027; CISO and Security and IT Operations Lead in FY2026. Product owns fixes (Chief Product Officer).
-**Trigger:** `product.release_shipped` (release gate evidence and post-release scan) and `product.vulnerability_fixed` (fix verification). Also scheduled: weekly authenticated scan of the estate, monthly external attack-surface scan, annual third-party penetration test by a CREST-accredited provider, continuous software composition analysis (SCA) and secret scanning on repositories.
-**Inputs:** release body (`release_id`, `product`, `version`, `change_summary`), scanner output, software bill of materials (SBOM), threat intelligence on exploited vulnerabilities, asset criticality, fix body (`vulnerability_id`, `release_id`, `fix_summary`).
+**Owner**: Senior Security Specialist (Engineering) from Q2 FY2027; CISO and Security and IT Operations Specialist in FY2026. Product owns fixes (Chief Product Officer).
+**Trigger**: `product.release_shipped` (release gate evidence and post-release scan) and `product.vulnerability_fixed` (fix verification). Also scheduled: weekly authenticated scan of the estate, monthly external attack-surface scan, annual third-party penetration test by a CREST-accredited provider, continuous software composition analysis (SCA) and secret scanning on repositories.
+**Inputs**: release body (`release_id`, `product`, `version`, `change_summary`), scanner output, software bill of materials (SBOM), threat intelligence on exploited vulnerabilities, asset criticality, fix body (`vulnerability_id`, `release_id`, `fix_summary`).
 
 ### Steps
 1. [agent] On `product.release_shipped`, run the post-release scan (dependency, container image, configuration and secrets) on the released artefact and compare with the pre-release gate baseline.
 2. [agent] Score each finding with CVSS v3.1 or v4 base score, adjust for exploit availability (known exploited vulnerabilities catalogue), internet exposure and data sensitivity, and assign severity.
-3. [human] Security Analyst (or CISO) validates findings above medium, removes false positives, and sets remediation targets: critical 48 hours, high 7 days, medium 30 days, low 90 days.
+3. [human] Senior Security Specialist (Engineering) (or CISO) validates findings above medium, removes false positives, and sets remediation targets: critical 7 days (24 hours if on the CISA known exploited vulnerabilities list or actively exploited), high 30 days, medium 60 days, low 90 days.
 4. [agent] For each valid finding at medium or above, emit `it_security.vulnerability_found` to Product and Operations with the evidence and deadline, and open a tracking ticket.
 5. [human] For critical findings with active exploitation, apply compensating controls immediately (WAF rule, feature flag off, network block) and, if exploitation is evidenced, open an incident under SOP-IT_SECURITY-01.
 6. [agent] On `product.vulnerability_fixed`, re-scan the affected asset and validate the fix against the finding; close the ticket if verified, otherwise reopen with the failed evidence and notify Product.
-7. [human] Approve risk acceptances only for findings that cannot be fixed within SLA: CISO signs, expiry maximum 90 days, compensating control recorded, reviewed by GRC Manager.
+7. [human] Approve risk acceptances only for findings that cannot be fixed within SLA: CISO signs, expiry maximum 90 days, compensating control recorded, reviewed by GRC Lead.
 8. [agent] Update the vulnerability metrics: mean time to remediate, SLA breach count, open critical and high count, and release gate pass rate.
 
 ### Outputs and messages
@@ -210,14 +210,14 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-07: Customer security questionnaire and security review
 
-**Owner:** GRC Manager from FY2027; CISO in FY2026. Sales is the requester (Chief Revenue Officer, Rahul Mehta).
-**Trigger:** `sales.security_review_requested` (body includes `deal_id`, `client_id`, `client_name`, `questionnaire_type`, `due_day`, `contract_value` (`amount_gbp`), `data_access_required`).
-**Inputs:** the client questionnaire (for example CAIQ, SIG Lite, bespoke spreadsheet, or a procurement portal), the answer library, current certificates (ISO 27001, Cyber Essentials Plus, later SOC 2 Type II), policies, penetration test summary, sub-processor list, data flow diagram for the proposed engagement.
+**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until then. Sales is the requester (Chief Revenue Officer, Rahul Mehta).
+**Trigger**: `sales.security_review_requested` (body includes `deal_id`, `client_id`, `client_name`, `questionnaire_type`, `due_day`, `contract_value` (`amount_gbp`), `data_access_required`).
+**Inputs**: the client questionnaire (for example CAIQ, SIG Lite, bespoke spreadsheet, or a procurement portal), the answer library, current certificates (ISO 27001, Cyber Essentials Plus, later SOC 2 Type II), policies, penetration test summary, sub-processor list, data flow diagram for the proposed engagement.
 
 ### Steps
 1. [agent] Parse the request and classify: standard (answer library coverage above 80%), bespoke, or on-site audit request. Estimate effort and confirm the deadline.
 2. [agent] Draft answers from the approved answer library with a source reference for each answer; mark questions with no approved answer as gaps.
-3. [human] Analyst or GRC Manager reviews the draft; subject-matter experts (Security and IT Operations Lead, Data, Legal) answer gaps. No answer states a control that is not operating; unsure answers are escalated, never guessed.
+3. [human] GRC Lead (or CISO until hired) reviews the draft; subject-matter experts (Security and IT Operations Specialist, Data, Legal) answer gaps. No answer states a control that is not operating; unsure answers are escalated, never guessed.
 4. [human] Flag commercial and legal issues (right to audit, uncapped liability, data residency, sub-processors, AI model training on client data) to Legal in the review thread; these items are Legal's to negotiate.
 5. [human] CISO signs off the final response when the deal is at or above £250k or the questionnaire asks for commitments beyond standard policy.
 6. [agent] Emit `it_security.security_questionnaire_completed` to Sales and Legal with the result, open gaps and any customer-requested remediation commitments. Add new approved answers to the library.
@@ -229,7 +229,7 @@ Common conventions used in every SOP:
 - Answer library updates with reviewer and date.
 
 ### SLA and controls
-- Standard: 3 business days; bespoke or on-site audit: 10 business days; a status update to Sales within 1 business day if the deadline is at risk.
+- Standard: 3 business days; bespoke or on-site audit request: 4 business days (the on-site visit itself is scheduled with the client); a status update to Sales within 1 business day if the deadline is at risk.
 - Controls: answer library reviewed quarterly and after every certificate change; two-person review for bespoke content; contractual commitments logged in the commitments register and tracked into delivery; no sharing of internal pentest reports without an NDA and CISO approval.
 
 ### Exceptions and escalation
@@ -239,14 +239,14 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-08: Third-party and AI vendor risk assessment
 
-**Owner:** GRC Manager from FY2027; CISO in FY2026. Operations (Chief Operating Officer Beatrice Moreau) requests; Finance and Legal consume the result.
-**Trigger:** `operations.vendor_review_requested` (body includes `vendor_id`, `vendor_name`, `service`, `data_classes`, `annual_cost_gbp` (`amount_gbp`), `tier_hint`, `due_day`) and `operations.vendor_approved` (post-approval control verification).
-**Inputs:** vendor questionnaire and evidence pack (ISO 27001 certificate, SOC 2 report, penetration test summary, DPA, sub-processor list, data location, AI model training terms), Lumenhall data classification, existing vendor register.
+**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until then. Operations (Chief Operating Officer Beatrice Moreau) requests; Finance and Legal consume the result.
+**Trigger**: `operations.vendor_review_requested` (body includes `vendor_id`, `vendor_name`, `service`, `data_classes`, `annual_cost_gbp` (`amount_gbp`), `tier_hint`, `due_day`) and `operations.vendor_approved` (post-approval control verification).
+**Inputs**: vendor questionnaire and evidence pack (ISO 27001 certificate, SOC 2 report, penetration test summary, DPA, sub-processor list, data location, AI model training terms), Lumenhall data classification, existing vendor register.
 
 ### Steps
 1. [agent] Tier the vendor: Tier 1 if it processes client confidential or personal data, has privileged network or tenant access, or is an AI model or agent platform handling client content; Tier 2 if it handles internal confidential data; Tier 3 otherwise.
 2. [agent] Send the tier-appropriate questionnaire, collect evidence, and draft a risk summary scoring governance, data protection, access control, encryption, incident response, resilience, sub-processors, and (for AI vendors) training-data use, model isolation and retention.
-3. [human] Analyst reviews certificates for scope and date (a certificate that excludes the service in use does not count), reads the SOC 2 exceptions section, and checks UK GDPR transfer mechanism (UK IDTA or UK Addendum to EU SCCs, adequacy) for any non-UK processing.
+3. [human] GRC Lead (CISO until hired) reviews certificates for scope and date (a certificate that excludes the service in use does not count), reads the SOC 2 exceptions section, and checks UK GDPR transfer mechanism (UK IDTA or UK Addendum to EU SCCs, adequacy) for any non-UK processing.
 4. [human] Legal confirms DPA terms; CISO decides residual risk: approve, approve with conditions (for example SSO and SCIM required, no training on our data, data residency in UK or EEA), or reject.
 5. [agent] Emit `it_security.vendor_risk_assessed` to Operations, Legal and Finance with tier, score, conditions and recommended contract review date.
 6. [agent] On `operations.vendor_approved`, verify the conditions are implemented before data flows: SSO enforced, admin accounts reviewed, API keys held in the secret manager, DPA filed, vendor added to the register and the sub-processor list.
@@ -268,13 +268,13 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-09: Certification and compliance programme
 
-**Owner:** GRC Manager from FY2027; CISO in FY2026.
-**Trigger:** `legal.regulatory_change_noted`, `legal.policy_update_published`, `people.compliance_training_completed`, `operations.continuity_test_completed`. Scheduled: monthly certification status review; quarterly internal audit; annual management review.
-**Inputs:** ISMS scope and Statement of Applicability, risk register, control library mapped to ISO 27001:2022, Cyber Essentials Plus, SOC 2 Trust Services Criteria, UK GDPR and DPA 2018, internal audit plan, certification body calendar, training completion data, continuity test report, policy register.
+**Owner**: GRC Lead from Q2 FY2027; CISO in FY2026 and until then.
+**Trigger**: `legal.regulatory_change_noted`, `legal.policy_update_published`, `people.compliance_training_completed`, `operations.continuity_test_completed`. Scheduled: monthly certification status review; quarterly internal audit; annual management review.
+**Inputs**: ISMS scope and Statement of Applicability, risk register, control library mapped to ISO 27001:2022, Cyber Essentials Plus, SOC 2 Trust Services Criteria, UK GDPR and DPA 2018, internal audit plan, certification body calendar, training completion data, continuity test report, policy register.
 
 ### Steps
 1. [agent] On `legal.regulatory_change_noted` (body includes `regulation`, `effective_day`, `summary`), map the change to the control library, identify impacted controls, policies and client commitments, and draft an impact note.
-2. [human] GRC Manager or CISO validates the impact, assigns control owners and due dates, and updates the risk register and Statement of Applicability if controls change; material changes go to the CEO and the Audit and Risk Committee.
+2. [human] GRC Lead or CISO validates the impact, assigns control owners and due dates, and updates the risk register and Statement of Applicability if controls change; material changes go to the CEO and the Audit and Risk Committee.
 3. [agent] On `legal.policy_update_published` (body includes `policy_id`, `version`, `effective_day`), update the policy register, compare the new text with the mapped controls, and raise an attestation task for staff.
 4. [human] Update affected procedures and technical standards within 10 business days of a policy change; confirm exceptions with the policy owner.
 5. [agent] On `people.compliance_training_completed` (body includes `course`, `completion_rate`, `cohort`), update the training evidence register, compute completion against the 95% target and flag overdue staff to their managers; accounts of persistently non-compliant staff are reviewed by People after 30 days.
@@ -289,7 +289,7 @@ Common conventions used in every SOP:
 
 ### SLA and controls
 - Regulatory change impact note within 10 business days of `legal.regulatory_change_noted`; policy attestation at least 95% within 30 days; continuity test findings tracked with owners within 5 business days; monthly status within 3 business days of month-end.
-- Controls: single source of truth for the Statement of Applicability; internal audit independent of control owners (GRC Manager audits, not the control owner; CISO reviews); evidence retention seven years; Sales may quote certification only at the stated status.
+- Controls: single source of truth for the Statement of Applicability; internal audit independent of control owners (GRC Lead audits, not the control owner; CISO reviews); evidence retention seven years; Sales may quote certification only at the stated status.
 - Related KPIs and certificates are quoted in client questionnaires only after the status is `certified` (SOP-IT_SECURITY-07).
 
 ### Exceptions and escalation
@@ -299,14 +299,14 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-10: AI agent register and credential governance
 
-**Owner:** CISO. The Chief Data and AI Officer (Dr Emeka Nwosu) is co-owner for model and data risk; each agent has a named accountable human owner (COMPANY.md §9.4).
-**Trigger:** `product.ai_risk_review_requested` (body includes `agent_id`, `change_summary`, `client_facing` (bool), `data_classes`, `requested_by`). Scheduled: monthly credential rotation check; quarterly register review.
-**Inputs:** agent register (agent id, purpose, accountable human owner, autonomy limits, data scope, credentials, model and provider, last review date), proposed change description, DPIA, secrets manager inventory, audit logs of agent actions.
+**Owner**: CISO. The Chief Data and AI Officer (Dr Emeka Nwosu) is co-owner for model and data risk; each agent has a named accountable human owner (COMPANY.md §9.4).
+**Trigger**: `product.ai_risk_review_requested` (body includes `agent_id`, `change_summary`, `client_facing` (bool), `data_classes`, `requested_by`). Scheduled: monthly credential rotation check; quarterly register review.
+**Inputs**: agent register (agent id, purpose, accountable human owner, autonomy limits, data scope, credentials, model and provider, last review date), proposed change description, DPIA, secrets manager inventory, audit logs of agent actions.
 
 ### Steps
 1. [agent] On the request, load the agent's register entry (or create a pending entry for a new agent) and summarise the change in terms of data, tools, permissions and autonomy.
 2. [agent] Check the security baseline: a unique non-human identity per agent (no shared credentials), credentials stored in the secrets manager (never in prompts, code or environment files), least-privilege scopes, short-lived tokens where the platform allows, audit logging enabled, egress allow-list, and prompt-injection exposure for any tool that reads untrusted content.
-3. [human] Security reviewer (CISO or Security Analyst) tests the guardrails: attempt prompt-injection through every input channel, verify that agent actions above £10,000 payment, signing, regulator notification and final hiring or termination decisions are blocked, and confirm client data stays within the data processing agreement.
+3. [human] Security reviewer (CISO or Senior Security Specialist (Engineering)) tests the guardrails: attempt prompt-injection through every input channel, verify that agent actions above £10,000 payment, signing, regulator notification and final hiring or termination decisions are blocked, and confirm client data stays within the data processing agreement.
 4. [human] CISO decides: approve, approve with conditions, or block. Conditions typically include human-in-the-loop approval on write actions, rate limits, narrower scopes and 30-day enhanced monitoring.
 5. [agent] Record the decision and conditions in the register, update the review date, and send the outcome to the requester through the ticket thread; Legal's AI risk review (`legal.ai_risk_review_completed`) is tracked as a parallel dependency, not duplicated here.
 6. [agent] Rotate each agent credential every 90 days (high-privilege every 30 days), revoke credentials for any agent not used in 30 days, and diff the register against the live identity provider monthly to detect unregistered agent identities.
@@ -329,9 +329,9 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-11: Annual budget cycle and department planning
 
-**Owner:** CISO, with finance business partner (CFO Hannah Whitcombe's team) as counterpart.
-**Trigger:** `finance.budget_cycle_opened` (starts annual cycle in Q4), `executive.budget_approved` (approval and envelopes), `executive.okrs_set` (company objectives), `executive.strategy_updated` (strategy change).
-**Inputs:** current spend by line, headcount plan (COMPANY.md §6.1), certification and audit calendar, tooling contracts and renewal dates, incident and vulnerability trends, client commitments, the approved envelope (COMPANY.md §5.4: £460k FY2026, £920k FY2027, £2,300k FY2028).
+**Owner**: CISO, with finance business partner (CFO Hannah Whitcombe's team) as counterpart.
+**Trigger**: `finance.budget_cycle_opened` (starts annual cycle in Q4), `executive.budget_approved` (approval and envelopes), `executive.okrs_set` (company objectives), `executive.strategy_updated` (strategy change).
+**Inputs**: current spend by line, headcount plan (COMPANY.md §6.1), certification and audit calendar, tooling contracts and renewal dates, incident and vulnerability trends, client commitments, the approved envelope (COMPANY.md §5.4: £460k FY2026, £920k FY2027, £2,300k FY2028).
 
 ### Steps
 1. [agent] On `finance.budget_cycle_opened`, build the draft budget from run rate, contracts and planned hires: people costs from average headcount times loaded cost (base x 1.28), plus non-people lines (tooling, certification and audit fees, penetration testing, training, cyber insurance contribution, managed detection and response, SOC 2 auditor fees).
@@ -357,13 +357,13 @@ Common conventions used in every SOP:
 
 ## SOP-IT_SECURITY-12: Security hiring request
 
-**Owner:** CISO. People (Chief People Officer Grace Adeyemi) runs recruitment; the CEO approves headcount outside the approved plan (COMPANY.md §9.3).
-**Trigger:** Schedule: monthly capacity review on the first working day, or an event: a capacity trigger is breached (open critical and high vulnerabilities above 15 for two consecutive months, alert queue above 150 per analyst, questionnaire backlog above 6 or over 5 business days old, access review overdue by 30 days, or an audit date at risk through resourcing).
-**Inputs:** KPI dashboard, approved headcount plan (2 humans FY2026, 5 FY2027, 9 FY2028; COMPANY.md §6.1), current roles and levels (COMPANY.md §6.2), alert and ticket volumes, agent utilisation.
+**Owner**: CISO. People (Chief People Officer Grace Adeyemi) runs recruitment; the CEO approves headcount outside the approved plan (COMPANY.md §9.3).
+**Trigger**: Schedule: monthly capacity review on the first working day, or an event: a capacity trigger is breached (open critical and high vulnerabilities above 15 for two consecutive months, alert queue above 150 per analyst, questionnaire backlog above 6 or over 5 business days old, access review overdue by 30 days, or an audit date at risk through resourcing).
+**Inputs**: KPI dashboard, approved headcount plan (2 humans FY2026, 5 FY2027, 9 FY2028; COMPANY.md §6.1), current roles and levels (COMPANY.md §6.2), alert and ticket volumes, agent utilisation.
 
 ### Steps
 1. [agent] Compute capacity: tickets per person per month, queue ageing, questionnaire turnaround, share of work handled by agents, and project the next two quarters.
-2. [human] CISO decides whether to add an agent capability first (preferred where the task is repeatable and low risk), re-prioritise, or hire. Specific roles in order of expected need: Security and IT Operations Lead (FY2026), Security Analyst and GRC Manager (FY2027), Cloud Security Engineer and Identity and Access Engineer (FY2028).
+2. [human] CISO decides whether to add an agent capability first (preferred where the task is repeatable and low risk), re-prioritise, or hire. Specific roles in order of expected need: GRC Lead and Senior Security Specialist (Engineering) (FY2027, with the IT Support Analyst in H2), then Security Engineering Lead, a second Senior Security Specialist (Engineering), a second Security and IT Operations Specialist and the Security Operations Specialist (FY2028).
 3. [agent] Draft the role request: role title, level, band from COMPANY.md §6.2, justification, trigger metric, start quarter, and the effect on the budget.
 4. [human] CISO signs the request; if within the approved plan, it proceeds; if outside, it is escalated for CEO approval through `executive.headcount_approved`.
 5. [agent] Emit `it_security.hire_requested` to People; track the requisition and make sure access provisioning (SOP-IT_SECURITY-04) is ready for the start date.
