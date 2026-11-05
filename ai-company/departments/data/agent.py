@@ -10,10 +10,11 @@ See blueprint.md, sops.md, kpis.md and economics.md in this directory.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Callable, Optional
 
-from core import DepartmentAgent, Kpi, Message, Role, publishes_for, subscribes_for
+from core import (TOPIC_SUBSCRIBERS, DepartmentAgent, Kpi, Message, Role, publishes_for,
+                  subscribes_for)
 
 # KPIs: FY2026 targets from kpis.md (COMPANY.md §5.4 budget, §5.3 funnel and §7 DSO targets underpin them).
 KPIS: list[Kpi] = [
@@ -41,17 +42,43 @@ BUDGET_GBP = {1: (90_000, 50_000), 2: (250_000, 110_000), 3: (1_000_000, 410_000
 # COMPANY.md §6.1: data headcount (humans, agents) at year end by year index.
 HEADCOUNT = {1: (1, 1), 2: (3, 3), 3: (9, 7)}
 
-# blueprint.md section 5: (fiscal year index, quarter of request) -> roles to request (45-day time-to-hire).
-HIRING_REQUESTS: dict[tuple[int, int], tuple[tuple[str, str, str], ...]] = {
-    (2, 2): (("Senior Data Engineer", "senior_consultant", "FY2027 Q3"),),
-    (2, 3): (("BI and Analytics Analyst", "consultant", "FY2027 Q4"),),
-    (2, 4): (("Principal Data Architect", "principal", "FY2028 Q1"),
-             ("Data Engineering Manager", "manager", "FY2028 Q1"),
-             ("Senior Forecasting Scientist", "senior_consultant", "FY2028 Q1")),
-    (3, 1): (("Data Governance Lead", "manager", "FY2028 Q2"),
-             ("Senior Data Engineer", "senior_consultant", "FY2028 Q2")),
-    (3, 3): (("BI and Analytics Analyst", "consultant", "FY2028 Q4"),),
-}
+# COMPANY.md §1: the fiscal year is the calendar year, so it starts in January (month number).
+FISCAL_YEAR_START_MONTH = 1
+FIRST_FISCAL_YEAR = 2026                 # COMPANY.md §1: Year 1 = FY2026
+
+# kpis.md: monthly report is on time when published by working day 3 (Monday to Friday; bank holidays
+# are not modelled in the simulation).
+REPORT_DEADLINE_WD = 3
+MONTHLY_REPORT_REASONS = ("monthly_schedule", "month_end_closed")
+
+# sops.md constants for the revenue and capacity forecasts (modelled assumptions).
+REVENUE_RECOGNITION_SHARE_90D = 0.40     # share of forecast new bookings recognised inside 90 days
+FTE_PER_ENGAGEMENT = 3.0                 # delivery FTE per active or expected engagement
+BILLABLE_UTILISATION = 0.70              # COMPANY.md §6 blended utilisation target
+
+# sops.md SOP-DATA-05: crisis mode ends when the crisis task is closed, else after this many days.
+CRISIS_MAX_DAYS = 90
+
+# Valid client health score range (customer_success scores are clamped to 0..100).
+HEALTH_SCORE_RANGE = (0.0, 100.0)
+
+# blueprint.md section 5 hiring plan: (role, level, start fiscal year, start quarter, out-of-cycle trigger).
+# Requests are raised one quarter before the start quarter (45-day time-to-hire).
+FEEDS_OR_DQ = "feeds_or_dq"                  # more than 10 source feeds, or DQ pass rate < 95% for 2 months
+REPORT_TURNAROUND = "report_turnaround"      # KPI report turnaround above 3 working days
+MAX_SOURCE_FEEDS = 10
+DQ_PASS_RATE_FLOOR = 95.0
+DQ_BREACH_MONTHS = 2
+HIRING_PLAN: tuple[tuple[str, str, int, int, Optional[str]], ...] = (
+    ("Senior Data Engineer", "senior_consultant", 2027, 3, FEEDS_OR_DQ),
+    ("BI and Analytics Analyst", "consultant", 2027, 4, REPORT_TURNAROUND),
+    ("Principal Data Architect", "principal", 2028, 1, None),
+    ("Data Engineering Manager", "manager", 2028, 1, None),
+    ("Senior Forecasting Scientist", "senior_consultant", 2028, 1, None),
+    ("Data Governance Lead", "manager", 2028, 2, None),
+    ("Senior Data Engineer", "senior_consultant", 2028, 2, None),
+    ("BI and Analytics Analyst", "consultant", 2028, 4, None),
+)
 
 # Required body keys per ingested topic (data quality check: completeness).
 REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
@@ -114,6 +141,11 @@ class DataAgent(DepartmentAgent):
             "mape_samples": [], "reported_periods": [], "forecast_months": [], "issue_keys": [],
             "agent_register": {}, "decisions": 0, "hire_requests_sent": [], "market": {},
             "bookings_by_line": {}, "pipeline_by_line": {},
+            "monthly_reports_published": 0, "late_reports": 0, "report_turnaround_breach": False,
+            "feed_topics": [], "first_event_ym": None, "dq_below_streak": 0, "last_tick_day": None,
+            "hire_slots_requested": [], "out_of_cycle_hires": 0, "hire_blocked_keys": [],
+            "health_out_of_range": 0, "crisis_task_id": None, "crisis_started_day": None,
+            "crises_closed": 0,
         })
         self._handlers: dict[str, Callable[[Message], list[Message]]] = {
             "marketing.lead_generated": self._on_lead_generated,
@@ -152,6 +184,10 @@ class DataAgent(DepartmentAgent):
                            message_id=message.id)
             return []
         self.state["events_seen"] += 1
+        if message.topic not in self.state["feed_topics"]:
+            self.state["feed_topics"].append(message.topic)
+        if self.state["first_event_ym"] is None:
+            self.state["first_event_ym"] = self.clock.date.year * 12 + self.clock.date.month - 1
         out: list[Message] = []
         body = message.body if isinstance(message.body, dict) else {}
         out.extend(self._validate(message, body))
@@ -161,19 +197,71 @@ class DataAgent(DepartmentAgent):
         return out
 
     def tick(self) -> list[Message]:
-        """Monthly report and forecast, quarterly agent report and hiring requests, weekly crisis reports."""
+        """Monthly report and forecast, quarterly cadence and hiring, crisis close and weekly crisis reports."""
         out: list[Message] = []
-        if self.clock.is_month_start:
-            first = self.clock.date.replace(day=1)
-            prev = first - timedelta(days=1)
-            if self.state["events_seen"] > 0:
-                out.extend(self._publish_kpi_report(f"{prev.year}-{prev.month:02d}", "monthly_schedule"))
-                out.extend(self._publish_forecast("monthly_schedule"))
-            if self.clock.date.month in (1, 4, 7, 10):
-                out.extend(self._quarterly_cadence())
-        elif self.state["crisis_mode"] and self.state["events_seen"] > 0 and self.clock.every(7):
+        today = self.clock.day
+        prev_tick, self.state["last_tick_day"] = self.state["last_tick_day"], today
+        first = self.clock.date.replace(day=1)
+        prev = first - timedelta(days=1)
+        prev_period = f"{prev.year}-{prev.month:02d}"
+        prev_ym = prev.year * 12 + prev.month - 1
+        first_ym = self.state["first_event_ym"]
+        # Publish the previous month's report on the first tick of the month (any date, so a coarse clock that
+        # skips the 1st still publishes, and is then measured against working day 3).
+        if (first_ym is not None and prev_ym >= first_ym and prev_period not in self.state["reported_periods"]):
+            out.extend(self._publish_kpi_report(prev_period, "monthly_schedule"))
+            out.extend(self._publish_forecast("monthly_schedule"))
+            self._update_dq_streak()
+            out.extend(self._out_of_cycle_hires())
+        quarter_start = self._fiscal_quarter_start()
+        if ((prev_tick is None and self.clock.date == quarter_start)
+                or (prev_tick is not None and prev_tick < self.clock.day_of(quarter_start) <= today)):
+            out.extend(self._quarterly_cadence())
+        out.extend(self._crisis_check())
+        if (self.state["crisis_mode"] and self.state["events_seen"] > 0 and self.clock.every(7)
+                and not self.clock.is_month_start):
             out.extend(self._publish_kpi_report(f"crisis-day-{self.clock.day}", "crisis_weekly"))
         return out
+
+    # ------------------------------------------------------- calendar helpers
+    def _emit_to_subscribers(self, topic: str, body: dict, delay_days: int = 0) -> list[Message]:
+        """Address one message to each department the topic map lists as a subscriber (no broadcast)."""
+        return [self.emit(topic, body, recipient=r, delay_days=delay_days) for r in TOPIC_SUBSCRIBERS[topic]]
+
+    @staticmethod
+    def _fiscal_year_of(d: date) -> int:
+        """Fiscal year named by the calendar year in which it starts (COMPANY.md §1: calendar year)."""
+        return d.year if d.month >= FISCAL_YEAR_START_MONTH else d.year - 1
+
+    def _fiscal_quarter_of(self, d: date) -> int:
+        return ((d.month - FISCAL_YEAR_START_MONTH) % 12) // 3 + 1
+
+    def _fiscal_quarter_start(self) -> date:
+        d = self.clock.date
+        offset = ((d.month - FISCAL_YEAR_START_MONTH) % 12) % 3
+        idx = d.year * 12 + d.month - 1 - offset
+        return date(idx // 12, idx % 12 + 1, 1)
+
+    @staticmethod
+    def _working_days_in_month_to(d: date) -> int:
+        """Weekdays (Monday to Friday) from the 1st of d's month up to and including d."""
+        return sum(1 for i in range(d.day) if date(d.year, d.month, i + 1).weekday() < 5)
+
+    @staticmethod
+    def _deadline_of_period(period: str) -> Optional[date]:
+        """Working day REPORT_DEADLINE_WD of the month after a YYYY-MM period."""
+        try:
+            year, month = (int(x) for x in period.split("-"))
+            nxt = date(year + month // 12, month % 12 + 1, 1)
+        except (ValueError, TypeError):
+            return None
+        count, d = 0, nxt
+        while True:
+            if d.weekday() < 5:
+                count += 1
+                if count == REPORT_DEADLINE_WD:
+                    return d
+            d += timedelta(days=1)
 
     # ------------------------------------------------------------ validation
     @staticmethod
