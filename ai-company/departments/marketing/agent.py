@@ -29,40 +29,51 @@ ENTRY_TIERS = {
     "keep": ("keep_essential", 96000),
 }
 
-# Ideal-customer-profile levers (modeled assumptions).
-MQL_THRESHOLD = 50
-TARGET_SECTORS = {"logistics", "financial_services", "insurance", "retail", "manufacturing",
-                  "energy", "healthcare", "public_sector", "professional_services"}
+# Ideal-customer-profile levers (modeled assumptions); mirror sops.md SOP-MARKETING-01 step 4 and 5.
+MQL_THRESHOLD = 60   # score >= 60 is a marketing-qualified lead; below goes to the nurture track
+TARGET_SECTORS = {"logistics", "financial_services", "financial services", "healthcare", "healthcare_services",
+                  "healthcare services", "manufacturing", "retail", "professional_services",
+                  "professional services"}
 SENIOR_TITLES = ("chief", "ceo", "cfo", "coo", "cto", "cio", "cdo", "vp", "vice president",
-                 "director", "head of", "managing director", "partner")
-SOURCE_POINTS = {"referral": 25, "event": 20, "direct": 15, "webinar": 15, "content_download": 10,
-                 "paid_search": 8, "paid_social": 5, "organic_search": 8, "partner": 20}
+                 "director", "head of", "managing director", "partner", "board")
+# Source quality points, out of 20.
+SOURCE_POINTS = {"referral": 20, "partner": 20, "event": 14, "webinar": 14, "organic_search": 10,
+                 "paid_search": 10, "website_form": 10, "direct": 10, "content_download": 10,
+                 "paid_social": 6, "cold_list": 4}
+INBOUND_SOURCES = ("referral", "event", "webinar", "organic_search", "paid_search", "website_form",
+                   "direct", "content_download", "paid_social")
 FREE_MAIL_DOMAINS = ("gmail.com", "hotmail.com", "yahoo.com", "outlook.com", "icloud.com")
 DISQUALIFIED_TITLES = ("student", "intern", "researcher", "journalist")
 
 # Average cost per lead by source (£, modeled) for spend attribution.
 COST_PER_LEAD_GBP = {"referral": 0, "event": 310, "direct": 0, "webinar": 140, "content_download": 85,
-                     "paid_search": 260, "paid_social": 210, "organic_search": 40, "partner": 120}
+                     "paid_search": 260, "paid_social": 210, "organic_search": 40, "partner": 120,
+                     "website_form": 40, "cold_list": 150}
 
 # COMPANY.md §6.1 headcount plan (humans) and §6.2 bands; used for the single hire request per year.
 OPEN_ROLES = {
-    2026: ("Demand Generation Manager", "manager", (92000, 115000)),
-    2027: ("Content and Events Lead", "manager", (92000, 115000)),
-    2028: ("Product Marketing Manager", "senior_consultant", (72000, 90000)),
+    2026: ("Marketing Operations Specialist", "consultant", (55000, 70000)),
+    2027: ("Demand Generation Lead", "manager", (92000, 115000)),
+    2028: ("Senior Product Marketing Specialist", "senior_consultant", (72000, 90000)),
 }
 
-# FY2026 targets (must mirror kpis.md).
+# FY2026 targets and directions (must mirror kpis.md section 1).
 KPIS = [
-    Kpi("marketing_leads_generated", "count", 640.0, None),
-    Kpi("lead_to_sql_rate", "percent", 25.0, None),
-    Kpi("marketing_sourced_pipeline_gbp", "gbp", 12000000.0, None),
-    Kpi("cost_per_qualified_lead_gbp", "gbp", 900.0, None, higher_is_better=False),
-    Kpi("lead_response_time_hours", "hours", 4.0, None, higher_is_better=False),
-    Kpi("content_pieces_published", "count", 96.0, None),
-    Kpi("events_held", "count", 12.0, None),
-    Kpi("case_studies_published", "count", 8.0, None),
-    Kpi("brand_incidents_open_over_48h", "count", 0.0, None, higher_is_better=False),
-    Kpi("marketing_budget_variance_pct", "percent", 5.0, None, higher_is_better=False),
+    Kpi("leads_generated", "count", 640.0, None),
+    Kpi("lead_to_qualified_rate", "percent", 25.0, None),
+    Kpi("lead_response_hours", "hours", 8.0, None, higher_is_better=False),
+    Kpi("cost_per_lead", "gbp", 1297.0, None, higher_is_better=False),
+    Kpi("cost_per_qualified_lead", "gbp", 5188.0, None, higher_is_better=False),
+    Kpi("marketing_cost_per_new_logo", "gbp", 34583.0, None, higher_is_better=False),
+    Kpi("inbound_lead_share", "percent", 45.0, None),
+    Kpi("us_lead_share", "percent", 0.0, None),   # track to plan (0 / 15 / 30)
+    Kpi("content_assets_published", "count", 48.0, None),
+    Kpi("content_qa_first_pass_rate", "percent", 90.0, None),
+    Kpi("events_run", "count", 6.0, None),
+    Kpi("case_studies_published", "count", 4.0, None),
+    Kpi("lost_deal_reactivation_rate", "percent", 8.0, None),
+    Kpi("brand_incident_first_response_hours", "hours", 4.0, None, higher_is_better=False),
+    Kpi("budget_variance_pct", "percent", 5.0, None, higher_is_better=False),
 ]
 
 _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -77,8 +88,10 @@ class MarketingAgent(DepartmentAgent):
         self.state.update({
             "lead_counter": 0,
             "leads": {},                 # lead_id -> record
-            "mql_count": 0,
-            "nurture_count": 0,
+            "mql_count": 0,              # leads emitted at stage mql (score >= MQL_THRESHOLD)
+            "nurture_count": 0,          # leads emitted at stage nurture (score < MQL_THRESHOLD)
+            "inbound_count": 0,
+            "us_lead_count": 0,
             "disqualified_count": 0,
             "sql_count": 0,              # sales.lead_qualified feedback
             "pipeline_gbp": 0.0,
@@ -150,30 +163,31 @@ class MarketingAgent(DepartmentAgent):
         return f"LD-{self.state['lead_counter']:05d}"
 
     def _score_lead(self, body: dict) -> tuple[int, list[str]]:
-        """ICP and intent scoring, 0 to 100. Returns (score, reasons)."""
+        """ICP, intent and source scoring, 0 to 100 (sops.md SOP-MARKETING-01 step 4). Returns (score, reasons)."""
         score, why = 0, []
+        # ICP fit, 50 points: size 20, sector 15, senior contact 15.
         employees = int(body.get("employees") or 0)
-        if employees >= 1000:
-            score += 30; why.append("enterprise_size")
-        elif employees >= 250:
-            score += 25; why.append("target_size")
-        elif employees >= 100:
-            score += 15; why.append("lower_mid_size")
-        elif employees >= 50:
-            score += 5; why.append("small_company")
+        if 200 <= employees <= 2000:
+            score += 20; why.append("target_size")
+        elif employees > 2000 or 50 <= employees < 200:
+            score += 8; why.append("off_target_size")
         sector = str(body.get("sector") or body.get("industry") or "").lower()
         if sector in TARGET_SECTORS:
             score += 15; why.append("target_sector")
-        title = str(body.get("contact_title") or body.get("title") or "").lower()
+        title = str(body.get("contact_role") or body.get("contact_title") or body.get("title") or "").lower()
         if any(t in title for t in SENIOR_TITLES):
-            score += 20; why.append("senior_buyer")
+            score += 15; why.append("senior_buyer")
+        # Intent, 30 points: pain point 10, asked for a conversation or diagnostic 15, repeat engagement 5.
+        if body.get("message") or body.get("summary") or body.get("pain_point"):
+            score += 10; why.append("named_pain_point")
+        if body.get("service_interest") or body.get("interest") or body.get("service_line") \
+                or body.get("requested_conversation"):
+            score += 15; why.append("requested_conversation")
+        if int(body.get("content_downloads") or 0) >= 2 or int(body.get("pricing_page_visits") or 0) >= 2:
+            score += 5; why.append("repeat_engagement")
+        # Source quality, 20 points.
         source = str(body.get("source") or "direct").lower()
-        pts = SOURCE_POINTS.get(source, 5)
-        score += pts; why.append(f"source_{source}")
-        if body.get("service_interest") or body.get("service_line"):
-            score += 10; why.append("stated_service_interest")
-        if body.get("budget_gbp") and float(body["budget_gbp"]) >= 45000:
-            score += 10; why.append("budget_at_or_above_entry_tier")
+        score += SOURCE_POINTS.get(source, 6); why.append(f"source_{source}")
         email = str(body.get("email") or "").lower()
         if any(email.endswith("@" + d) for d in FREE_MAIL_DOMAINS):
             score -= 30; why.append("free_mail_domain")
@@ -182,7 +196,8 @@ class MarketingAgent(DepartmentAgent):
         return max(0, min(100, score)), why
 
     def _suggest_offer(self, body: dict, employees: int) -> tuple[str, str, int]:
-        line = str(body.get("service_interest") or body.get("service_line") or "").lower()
+        line = str(body.get("service_interest") or body.get("interest") or body.get("service_line") or "").lower()
+        line = line.split("_")[0]
         if line not in ENTRY_TIERS:
             line = "compass" if employees < 1000 else "forge"
         tier, price = ENTRY_TIERS[line]
@@ -209,48 +224,54 @@ class MarketingAgent(DepartmentAgent):
         by_src = self.state["leads_by_source"]
         by_src[source] = by_src.get(source, 0) + 1
         self.state["spend_gbp"] += COST_PER_LEAD_GBP.get(source, 100)
-        # Speed-to-lead: human or agent response inside the SLA window; referrals first.
-        response_hours = 1.0 if source == "referral" else 2.5 if score >= MQL_THRESHOLD else 8.0
+        # Speed-to-lead: response inside the SLA window; referrals first.
+        response_hours = 1.0 if source in ("referral", "partner") else 2.5 if score >= MQL_THRESHOLD else 8.0
         self.state["response_hours_total"] += response_hours
         self.state["response_count"] += 1
 
+        country = str(body.get("country") or "").upper()
         record = {"lead_id": lead_id, "company": company, "score": score, "source": source,
                   "employees": employees, "received_day": self.clock.day, "reasons": reasons}
 
-        if "non_buyer_persona" in reasons or "free_mail_domain" in reasons and score < 25:
-            record["status"] = "disqualified"
+        if "non_buyer_persona" in reasons or ("free_mail_domain" in reasons and score < 25):
+            record["status"] = "closed"
             self.state["disqualified_count"] += 1
             self.state["leads"][lead_id] = record
             self.log_event("marketing.activity.lead_disqualified",
                            f"{lead_id} {company} disqualified (score {score})", lead_id=lead_id, score=score)
             return []
 
-        if score < MQL_THRESHOLD:
-            record["status"] = "nurture"
-            self.state["nurture_count"] += 1
-            self.state["leads"][lead_id] = record
-            self.create_task(f"Enrol {company} ({lead_id}) in 90-day nurture sequence", due_in_days=3, priority="low")
-            self.log_event("marketing.activity.lead_nurtured",
-                           f"{lead_id} {company} scored {score} < {MQL_THRESHOLD}; nurture",
-                           lead_id=lead_id, score=score)
-            return []
-
+        # Every genuine lead is handed to sales and data as marketing.lead_generated: COMPANY.md §5.3 counts
+        # 640 leads of which 25% qualify downstream. Score >= MQL_THRESHOLD marks the MQL stage (priority
+        # hand-off); lower scores carry stage "nurture" and also get a nurture task.
+        stage = "mql" if score >= MQL_THRESHOLD else "nurture"
         line, tier, price = self._suggest_offer(body, employees)
-        record.update({"status": "mql", "service_line": line, "tier": tier, "est_value_gbp": price})
+        record.update({"status": stage, "service_line": line, "tier": tier, "est_value_gbp": price})
         self.state["leads"][lead_id] = record
-        self.state["mql_count"] += 1
-        self.state["pipeline_gbp"] += price
-        priority = "high" if score >= 75 or source == "referral" else "medium"
-        self.create_task(f"Hand over {company} ({lead_id}) to sales with enrichment pack", due_in_days=1,
-                         priority=priority)
+        self.state["inbound_count"] += 1 if source in INBOUND_SOURCES else 0
+        self.state["us_lead_count"] += 1 if country in ("US", "USA") else 0
+        if stage == "mql":
+            self.state["mql_count"] += 1
+            self.state["pipeline_gbp"] += price
+            priority = "high" if score >= 75 or source == "referral" else "medium"
+            self.create_task(f"Hand over {company} ({lead_id}) to sales with enrichment pack", due_in_days=1,
+                             priority=priority)
+        else:
+            self.state["nurture_count"] += 1
+            self.create_task(f"Enrol {company} ({lead_id}) in 90-day nurture sequence", due_in_days=3,
+                             priority="low")
+        self.log_event("marketing.activity.lead_scored",
+                       f"{lead_id} {company} scored {score}; stage {stage}", lead_id=lead_id, score=score,
+                       stage=stage)
+        severity = "high" if score >= 85 else "medium" if score >= 70 else "low"
         out = self.emit("marketing.lead_generated", {
-            "lead_id": lead_id, "client_name": company, "company": company, "employees": employees,
-            "sector": body.get("sector") or body.get("industry"), "source": source,
-            "lead_score": score, "score_reasons": reasons, "service_line": line, "tier": tier,
-            "amount_gbp": price, "contact_title": body.get("contact_title") or body.get("title"),
-            "severity": "low" if priority == "medium" else "medium",
-            "summary": f"MQL {lead_id}: {company}, score {score}, source {source}",
-            "response_hours": response_hours,
+            "lead_id": lead_id, "company": company, "client_name": company,
+            "contact_name": body.get("contact_name") or body.get("name"),
+            "contact_role": body.get("contact_role") or body.get("contact_title") or body.get("title"),
+            "employees": employees, "sector": body.get("sector") or body.get("industry"), "source": source,
+            "score": score, "stage": stage, "score_reasons": reasons, "service_line": line, "tier": tier,
+            "amount_gbp": price, "severity": severity,
+            "summary": f"{stage.upper()} {lead_id}: {company}, score {score}, source {source}",
         }, delay_days=1)
         return [out]
 
@@ -271,10 +292,10 @@ class MarketingAgent(DepartmentAgent):
         self.log_event("marketing.activity.sql_feedback",
                        f"sales accepted {lead_id or 'lead'} from source {source}", lead_id=lead_id, source=source)
         out: list[Message] = []
-        # Source quality check: after 10 MQLs, a source below 15% acceptance gets re-scoped.
-        leads_total = self.state["mql_count"]
+        # Source quality check: after 10 leads, acceptance below 15% triggers an ICP review.
+        leads_total = self.state["mql_count"] + self.state["nurture_count"]
         if leads_total >= 10 and self.state["sql_count"] / leads_total < 0.15:
-            self.create_task("Tighten ICP scoring: MQL to SQL acceptance below 15%", due_in_days=7, priority="high")
+            self.create_task("Tighten ICP scoring: lead to SQL acceptance below 15%", due_in_days=7, priority="high")
         # Opportunity-stage account-based follow-up: relevant case study to the buying committee.
         if body.get("client_name") or (rec and rec.get("company")):
             name = body.get("client_name") or rec["company"]
@@ -558,22 +579,23 @@ class MarketingAgent(DepartmentAgent):
     # ------------------------------------------------------------------ KPI bookkeeping
     def _refresh_kpis(self) -> None:
         st = self.state
-        mql, sql = st["mql_count"], st["sql_count"]
-        total_inbound = mql + st["nurture_count"] + st["disqualified_count"]
+        leads, sql = st["mql_count"] + st["nurture_count"], st["sql_count"]
+        incidents = st["brand_incidents"]
         actual = {
-            "marketing_leads_generated": float(mql),
-            "lead_to_sql_rate": round(100.0 * sql / mql, 1) if mql else None,
-            "marketing_sourced_pipeline_gbp": float(st["pipeline_gbp"]),
-            "cost_per_qualified_lead_gbp": round(st["spend_gbp"] / mql, 1) if mql else None,
-            "lead_response_time_hours": round(st["response_hours_total"] / st["response_count"], 2)
+            "leads_generated": float(leads),
+            "lead_to_qualified_rate": round(100.0 * sql / leads, 1) if leads else None,
+            "lead_response_hours": round(st["response_hours_total"] / st["response_count"], 2)
             if st["response_count"] else None,
-            "content_pieces_published": float(st["content_published"]),
-            "events_held": float(st["events_held"]),
+            "cost_per_lead": round(st["spend_gbp"] / leads, 1) if leads else None,   # programme spend only
+            "cost_per_qualified_lead": round(st["spend_gbp"] / sql, 1) if sql else None,
+            "inbound_lead_share": round(100.0 * st["inbound_count"] / leads, 1) if leads else None,
+            "us_lead_share": round(100.0 * st["us_lead_count"] / leads, 1) if leads else None,
+            "content_assets_published": float(st["content_published"]),
+            "events_run": float(st["events_held"]),
             "case_studies_published": float(st["case_studies_published"]),
-            "brand_incidents_open_over_48h": float(sum(
-                1 for i in st["brand_incidents"].values() if self.clock.day - i["raised_day"] > 2)),
+            "brand_incident_first_response_hours": 4.0 if incidents else None,   # SLA, human-timed
         }
-        st["inbound_total"] = total_inbound
+        st["inbound_total"] = leads + st["disqualified_count"]
         st["kpis"] = {k: v for k, v in actual.items() if v is not None}
 
     def kpi_snapshot(self) -> list[Kpi]:

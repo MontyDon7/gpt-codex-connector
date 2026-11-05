@@ -4,7 +4,7 @@ Department: `finance` (agent class `FinanceAgent`). Head: Hannah Whitcombe, Chie
 
 Conventions used throughout:
 
-- `[human]` steps are performed by the CFO or the Finance Manager (the second human in FY2026); `[agent]` steps by the Finance agent working under a named human owner. Agents may draft, analyse, monitor and propose; they may not approve or release payments above £10,000, sign contracts or notify regulators (COMPANY.md §9.4).
+- `[human]` steps are performed by the CFO, or by the Finance Manager once in post (joins Q4 FY2026; until then the CFO is the only human and performs every `[human]` step marked Finance Manager); `[agent]` steps by the Finance agent working under a named human owner. Agents may draft, analyse, monitor and propose; they may not approve or release payments above £10,000, sign contracts or notify regulators (COMPANY.md §9.4).
 - Money in message bodies is `amount_gbp` ex VAT unless the key says `total_gbp`. VAT is 20% for UK clients (COMPANY.md §7). US clients are quoted in USD at £1 = $1.27 (COMPANY.md §1) from FY2027.
 - SLAs in "business days" exclude UK bank holidays. Sim days are integers from Day 0 = 2026-01-05 (COMPANY.md §1); `due_day` keys are sim days.
 - Business IDs follow CONVENTIONS section 4: `CL-0001`, `DL-0001`, `PR-0001`, `CT-0001`, `EN-0001`, `INV-2026-0001`, `REQ-0001`, `VN-0001`, `BUD-2027` (budget cycle id carries the fiscal year being budgeted, so the cycle opened in October 2026 is `BUD-2027`).
@@ -22,7 +22,7 @@ Conventions used throughout:
 | SOP-FINANCE-07 | Collections ladder | Daily schedule (ageing run, 07:00 UK) | CFO (agent: collections) | Reminder day 31, call day 38, CFO escalation day 45, legal letter day 60 |
 | SOP-FINANCE-08 | Disputes, credit notes and bad debt | `legal.client_dispute_raised` | CFO | Dispute hold applied same day; credit note decision within 5 business days |
 | SOP-FINANCE-09 | Keep renewals, churn and revenue reversal | `customer_success.renewal_due`, `sales.renewal_proposal_sent`, `customer_success.renewal_confirmed`, `customer_success.client_churned` | Finance Manager | Renewal pricing check within 2 business days; churn billing stop same day |
-| SOP-FINANCE-10 | Month-end close | Schedule: working day 1 of each month | CFO | Close complete by working day 6 (WD+6); variance flags same day |
+| SOP-FINANCE-10 | Month-end close | Schedule: working day 1 of each month | CFO | Close complete by working day 8 in FY2026 (WD6 FY2027, WD5 FY2028); variance flags same day |
 | SOP-FINANCE-11 | Cash forecast and treasury | Weekly schedule (Monday), `data.forecast_updated`, `delivery.capacity_forecast_updated`, `data.kpi_report_published` | CFO (agent: treasury analyst) | 13-week forecast refreshed every Monday by 12:00; ad hoc refresh within 1 business day of an input change |
 | SOP-FINANCE-12 | Annual budget cycle | Schedule: 1 October opens cycle; `<dept>.budget_submitted` from all departments; `executive.budget_approved` | CFO | Cycle opened 1 Oct; submissions due day 21 of cycle; consolidated within 3 business days of last submission |
 | SOP-FINANCE-13 | Headcount cost control and payroll | `people.requisition_opened`, `executive.headcount_approved`, `people.offer_accepted`, `people.new_hire_started`, `people.employee_left`, `people.contractor_engaged` | Finance Manager | Headcount cost check within 2 business days of requisition; payroll data frozen WD-5 of each month |
@@ -360,7 +360,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 ## SOP-FINANCE-10: Month-end close
 
 **Owner**: CFO (Hannah Whitcombe), with the Finance Manager as close lead.
-**Trigger**: schedule: first working day of each month (WD1) starts the close for the prior month; target completion is WD6. Quarter-end and year-end add a VAT return and a statutory step.
+**Trigger**: schedule: first working day of each month (WD1) starts the close for the prior month; target completion is WD8 in FY2026, WD6 in FY2027 and WD5 in FY2028 (kpis.md `month_end_close_days`). Quarter-end and year-end add a VAT return and a statutory step.
 **Inputs**: bank statements, receivables and payables ledgers, billing schedules, delivery's percentage-of-completion estimates and timesheets, payroll journals, expense claims, supplier accruals, fixed-asset list, prior-period budget, accruals list from operations and procurement.
 
 ### Steps
@@ -374,7 +374,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 7. [agent] WD4: produce the management accounts: P&L, balance sheet, cash flow, revenue by line (Compass, Forge, Keep), gross margin (cost of revenue = delivery + customer_success, COMPANY.md §5.1), department spend vs budget.
 8. [agent] WD5: run budget-vs-actual by department; flag any variance above 10% and £25,000 on a monthly or year-to-date basis, or any overspend above 5% of annual budget.
 9. [human] WD5: CFO and Finance Manager review commentary with department heads for flagged variances; update the forecast for the rest of the year.
-10. [human] WD6: CFO signs off the close and publishes it; the agent distributes the pack to executive and data.
+10. [human] WD7 to WD8 (FY2026 target WD8): CFO signs off the close and publishes it; the agent distributes the pack to executive and data.
 11. [agent] Archive the close file (reconciliations, journals, reviews) with a checklist for audit support.
 12. [human] Payroll and tax: PAYE/NIC RTI submission and payment by the 22nd (19th if paying by post), VAT return quarterly via Making Tax Digital (1 month and 7 days after quarter end), Corporation Tax per statutory dates; the Finance Manager prepares, the CFO approves.
 
@@ -386,7 +386,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 
 ### SLA and controls
 
-- SLA: close by WD6 in FY2026 (WD5 in FY2027, WD4 in FY2028 as automation improves); 100% of balance sheet accounts reconciled; zero unreconciled bank items older than 30 days.
+- SLA: close by WD8 in FY2026 (WD6 in FY2027, WD5 in FY2028 as automation improves; kpis.md `month_end_close_days`); 100% of balance sheet accounts reconciled; zero unreconciled bank items older than 30 days.
 - Control: preparer and reviewer are different people for every reconciliation and journal; journals above £25,000 need CFO review; the agent can post only recurring and rule-based journals with a pre-approved template.
 - Control: close checklist with sign-off per task; variance commentary mandatory for every flagged department.
 - Control: access to the ledger is least privilege; period lock enforced after sign-off; reopening a period needs CFO written approval and is logged.
@@ -458,6 +458,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 - `finance.budget_cycle_opened` to all departments: `budget_cycle_id` (`BUD-2027`), `fiscal_year`, `due_day`, `guidance` (loaded cost factor, headcount ceilings by `department`), `summary`.
 - `finance.budget_consolidated` to `executive`: `budget_cycle_id`, `total_gbp`, `people_gbp`, `non_people_gbp`, `revenue_gbp`, `ebitda_gbp`, `departments_received` (list), `departments_over_envelope` (list), `summary`.
 - `finance.budget_variance_flagged` to `executive` when a department submission exceeds its envelope by more than 5% or £25,000: `department`, `budget_gbp`, `submitted_gbp`, `variance_gbp`, `variance_pct`, `severity`.
+- `finance.budget_submitted` to `executive`: finance's own department submission into the cycle (`department`=`finance`, `budget_cycle_id`, `amount_gbp`, `people_gbp`, `non_people_gbp`), prepared by the Finance Manager (CFO until Q4 FY2026) and tied to the COMPANY.md §5.4 envelope of £310k / £730k / £1,500k.
 - `finance.hire_requested` is not used here; finance's own requests are in SOP-FINANCE-16.
 
 ### SLA and controls
@@ -496,6 +497,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 ### Outputs and messages
 
 - `finance.cash_forecast_updated` to `executive`, `data`: refreshed payroll and subcontractor lines after an approved hire, leaver or contractor, with `horizon_weeks`, `closing_cash_gbp`, `min_cash_gbp`, `summary`; emitted if the change exceeds £10,000 a month.
+- `finance.hire_requested` to `people`: finance's budget-check response to `people.requisition_opened` with `requisition_id`, `department`, `role`, `salary_gbp`, `annual_loaded_cost_gbp`, `within_budget` (bool), `year_end_headcount_plan`, `requested_by`.
 - `finance.budget_variance_flagged` to `executive`: when a requisition or offer breaches the approved people budget; `department`, `period`, `variance_gbp`, `variance_pct`, `severity`, `summary`.
 
 ### SLA and controls
@@ -598,7 +600,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 ### Steps
 
 1. [agent] Compute capacity metrics each quarter: invoices issued per FTE, bank lines reconciled per FTE, close days vs target, journals above manual threshold, rework rate, overtime proxy.
-2. [agent] Compare with the triggers: more than 120 customer invoices a month per human, close slipping beyond WD6 for two consecutive months, more than 3% invoice errors, VAT or statutory deadline at risk, or US entity formation approaching.
+2. [agent] Compare with the triggers: more than 120 customer invoices a month per human, close slipping beyond the target close day (WD8 in FY2026) for two consecutive months, more than 3% invoice errors, VAT or statutory deadline at risk, or US entity formation approaching.
 3. [human] CFO reviews against the approved plan (COMPANY.md §6.1) and decides between automation (agent configuration), additional agent capacity, and a human hire; levels follow COMPANY.md §6.2 (for example Finance Analyst at consultant level, £55,000 to £70,000).
 4. [human] CFO prepares the justification: workload data, cost = base x 1.28, alternatives, and the risk of not hiring.
 5. [agent] Raise the hire request to the people team with the role, level, start quarter and justification; track the requisition through SOP-FINANCE-13.
@@ -672,4 +674,5 @@ Published topics (every published topic appears in the outputs of at least one S
 | `finance.budget_variance_flagged` | 10, 12, 13, 14, 15 |
 | `finance.cash_forecast_updated` | 02, 06, 08, 09, 10, 11, 13, 14, 15 |
 | `finance.month_end_closed` | 10 |
-| `finance.hire_requested` | 16 |
+| `finance.budget_submitted` | 12 |
+| `finance.hire_requested` | 13, 16 |

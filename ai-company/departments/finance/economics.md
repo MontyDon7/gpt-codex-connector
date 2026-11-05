@@ -21,7 +21,7 @@ Department scope: FP&A, financial accounting and close, billing, collections, tr
 | Training, professional memberships (ICAEW/ACCA/CIMA), subscriptions | 5 | 10 | 20 |
 | Contingency (unallocated, CFO-held) | 0 | 0 | 30 |
 | **Non-people total** | **100** | **250** | **700** |
-| **Department total** | **310** | **730** | **1,500** |
+| **Total (people + non-people)** | **310** | **730** | **1,500** |
 
 Check: non-people FY2026 30+25+20+10+0+10+0+5+0 = 100; FY2027 85+55+45+25+15+15+0+10+0 = 250; FY2028 145+140+130+90+60+55+30+20+30 = 700.
 

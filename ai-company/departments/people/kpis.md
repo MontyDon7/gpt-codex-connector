@@ -6,19 +6,19 @@
 
 | KPI id | Name | Unit | FY2026 target | FY2027 target | FY2028 target | Direction | Frequency | Owner |
 |---|---|---|---|---|---|---|---|---|
-| time_to_hire_days | Time to hire (requisition opened to offer accepted) | days | 45 | 42 | 40 | lower is better | weekly | Head of Talent Acquisition (FY2026: CPO) |
-| offer_acceptance_rate | Offer acceptance rate | percent | 80 | 82 | 85 | higher is better | monthly | Head of Talent Acquisition (FY2026: CPO) |
+| time_to_hire_days | Time to hire (requisition opened to offer accepted) | days | 45 | 42 | 40 | lower is better | weekly | Talent Acquisition Partner (FY2026: CPO) |
+| offer_acceptance_rate | Offer acceptance rate | percent | 80 | 82 | 85 | higher is better | monthly | Talent Acquisition Partner (FY2026: CPO) |
 | attrition_rate_annualised | Voluntary and involuntary attrition (humans, trailing 12 months) | percent | 14 | 12.5 | 11 | lower is better | monthly | Chief People Officer |
 | regretted_attrition_rate | Regretted attrition (rated 'strong' or above at last review) | percent | 6 | 5 | 4 | lower is better | monthly | Chief People Officer |
-| cost_per_hire_gbp | Recruiting cost per hire (non-salary) | GBP | 2000 | 2200 | 4500 | lower is better | quarterly | People Operations Lead (FY2026: CPO) |
-| onboarding_completion_rate | New-hire onboarding checklist completed by day 30 | percent | 95 | 96 | 97 | higher is better | monthly | People Operations Lead (FY2026: CPO) |
-| day_one_readiness_rate | New hires with laptop, accounts and payroll set up on day 1 | percent | 95 | 97 | 98 | higher is better | per cohort | People Operations Lead (FY2026: CPO) |
+| cost_per_hire_gbp | Recruiting cost per hire (non-salary) | GBP | 2000 | 2200 | 4500 | lower is better | quarterly | People Operations Specialist (FY2026: CPO) |
+| onboarding_completion_rate | New-hire onboarding checklist completed by day 30 | percent | 95 | 96 | 97 | higher is better | monthly | People Operations Specialist (FY2026: CPO) |
+| day_one_readiness_rate | New hires with laptop, accounts and payroll set up on day 1 | percent | 95 | 97 | 98 | higher is better | per cohort | People Operations Specialist (FY2026: CPO) |
 | engagement_score | Engagement survey index (eNPS-style composite, 0 to 100) | score | 72 | 74 | 76 | higher is better | quarterly | Chief People Officer |
-| compliance_training_completion | Mandatory compliance training completed on time | percent | 98 | 98 | 99 | higher is better | monthly | People Operations Lead (FY2026: CPO) |
+| compliance_training_completion | Mandatory compliance training completed on time | percent | 98 | 98 | 99 | higher is better | monthly | People Operations Specialist (FY2026: CPO) |
 | performance_review_completion | Performance reviews completed in cycle window | percent | 100 | 100 | 100 | higher is better | per cycle (half-yearly) | Chief People Officer |
-| payroll_accuracy_rate | Payroll runs right-first-time (no post-run correction) | percent | 99.5 | 99.7 | 99.8 | higher is better | monthly | People Operations Lead (FY2026: CPO) |
+| payroll_accuracy_rate | Payroll runs right-first-time (no post-run correction) | percent | 99.5 | 99.7 | 99.8 | higher is better | monthly | People Operations Specialist (FY2026: CPO) |
 | human_oversight_coverage | AI-assisted HR decisions with recorded human decision-maker | percent | 100 | 100 | 100 | higher is better | monthly | Chief People Officer |
-| diverse_shortlist_rate | Shortlists meeting the agreed diversity-of-slate standard | percent | 70 | 80 | 85 | higher is better | quarterly | Head of Talent Acquisition (FY2026: CPO) |
+| diverse_shortlist_rate | Shortlists meeting the agreed diversity-of-slate standard | percent | 70 | 80 | 85 | higher is better | quarterly | Talent Acquisition Partner (FY2026: CPO) |
 | hiring_plan_attainment | Hires started vs approved headcount plan (year-end humans) | percent | 100 | 100 | 100 | higher is better | monthly | Chief People Officer |
 | people_cost_per_head_gbp | Average loaded people cost per average FTE | GBP | 138000 | 122000 | 120000 | lower is better | quarterly | Chief People Officer with Finance |
 
@@ -145,15 +145,15 @@ OKRs are set each January from `executive.okrs_set` and reviewed quarterly. FY20
 | offer_acceptance_rate | ATS offer records; `people.offer_accepted` vs offers extended | PeopleAgent | Monthly |
 | attrition_rate_annualised | HRIS leaver records; `people.employee_left` | PeopleAgent, verified by Chief People Officer | Monthly executive pack; quarterly board pack |
 | regretted_attrition_rate | HRIS leavers joined to performance ratings | Chief People Officer (human) | Monthly |
-| cost_per_hire_gbp | Finance ledger (recruiting cost centre) and ATS hires | People Operations Lead with `finance` | Quarterly; budget cycle (`finance.budget_cycle_opened`) |
+| cost_per_hire_gbp | Finance ledger (recruiting cost centre) and ATS hires | People Operations Specialist with `finance` | Quarterly; budget cycle (`finance.budget_cycle_opened`) |
 | onboarding_completion_rate | HRIS onboarding checklist; `people.new_hire_started` plus day-30 check | PeopleAgent | Monthly |
 | day_one_readiness_rate | `it_security.access_provisioned`, `operations.workspace_ready` vs start day | PeopleAgent | Per cohort; monthly |
 | engagement_score | Survey tool export; `people.engagement_survey_completed` | PeopleAgent, reviewed by CPO | Quarterly pulse; annual full survey; board people update |
 | compliance_training_completion | Learning platform export; `people.compliance_training_completed` | PeopleAgent | Monthly; also reported to `legal` and `it_security` |
 | performance_review_completion | HRIS review module | Chief People Officer | Each cycle close; board people update |
-| payroll_accuracy_rate | Payroll bureau variance report; HMRC RTI acknowledgements; Finance reconciliation | People Operations Lead | Monthly after payroll close |
+| payroll_accuracy_rate | Payroll bureau variance report; HMRC RTI acknowledgements; Finance reconciliation | People Operations Specialist | Monthly after payroll close |
 | human_oversight_coverage | HR decision log (decision id, agent output reference, decision-maker) | PeopleAgent produces, CPO attests | Monthly; quarterly sample audit by `legal` and `data` |
-| diverse_shortlist_rate | ATS shortlist plus anonymised monitoring data | Head of Talent Acquisition | Quarterly |
+| diverse_shortlist_rate | ATS shortlist plus anonymised monitoring data | Talent Acquisition Partner | Quarterly |
 | hiring_plan_attainment | HRIS headcount vs `executive.headcount_approved` and plan (COMPANY.md §6.1) | PeopleAgent | Monthly executive pack |
 | people_cost_per_head_gbp | Payroll totals and on-cost schedule; reconciled with Finance | Chief People Officer with `finance` | Quarterly |
 
