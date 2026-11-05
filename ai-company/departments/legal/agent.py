@@ -3,7 +3,7 @@
 The agent does first-pass analysis, drafting and tracking only. It never gives binding legal advice, never
 signs contracts and never notifies regulators (COMPANY.md §9.4): every judgement-bearing output is marked as a
 draft for review by a qualified human lawyer (the General Counsel) and the human steps (signature, ICO filing)
-are modelled as delayed ``legal.internal.*`` confirmations.
+are modelled as scheduled confirmations processed by ``tick`` (no internal topics are emitted).
 """
 
 from __future__ import annotations
@@ -314,7 +314,7 @@ class LegalAgent(DepartmentAgent):
                       "soc2_type2": "planned"},
             "okrs": {}, "board_meetings": [], "leavers": [], "hires_requested": [], "crisis_active": False,
             "training": {}, "budget": {}, "strategy_flags": [],
-            "escalations": {}, "dsars": {}, "triage_days": [], "ai_reviews": {},
+            "escalations": {}, "scheduled": [], "dsars": {}, "triage_days": [], "ai_reviews": {},
         })
         self._handlers: dict[str, Callable[[Message], list[Message]]] = {
             "sales.deal_won": self._on_deal_won,
@@ -349,11 +349,6 @@ class LegalAgent(DepartmentAgent):
             "people.employee_left": self._on_employee_left,
             "people.offer_accepted": self._on_offer_accepted,
             "product.ai_risk_review_requested": self._on_ai_risk_review_requested,
-            "legal.internal.signature_due": self._on_signature_due,
-            "legal.internal.ico_filing_due": self._on_ico_filing_due,
-            "legal.internal.review_release_due": self._on_review_release_due,
-            "legal.internal.gc_decision_due": self._on_gc_decision_due,
-            "legal.internal.ai_signoff_due": self._on_ai_signoff_due,
         }
 
     # ------------------------------------------------------------------------------------------------
@@ -375,7 +370,7 @@ class LegalAgent(DepartmentAgent):
 
     def tick(self) -> list[Message]:
         """Daily breach deadline watch, weekly matter review, monthly calendar and hiring cadence."""
-        out: list[Message] = []
+        out: list[Message] = self._run_scheduled()
         self._watch_breach_deadlines()
         if self.clock.every(7):
             self._dsar_watch()
@@ -417,8 +412,26 @@ class LegalAgent(DepartmentAgent):
         body.setdefault("disclaimer", DISCLAIMER)
         return self.emit(topic, body, reply_to=reply_to, delay_days=delay_days)
 
-    def _internal(self, topic: str, body: dict, delay_days: int) -> Message:
-        return self.emit(topic, body, recipient="legal", delay_days=delay_days)
+    def _schedule(self, kind: str, payload: dict, delay_days: int) -> None:
+        """Queue a modelled human confirmation (signature, review release, ICO filing, GC decision, sign-off).
+
+        Processed by tick() on the due day. Kept in agent state, so nothing is emitted on the bus.
+        """
+        self.state["scheduled"].append({"due_day": self.clock.day + delay_days, "kind": kind,
+                                        "payload": dict(payload)})
+
+    def _run_scheduled(self) -> list[Message]:
+        out: list[Message] = []
+        handlers = {"signature": self._on_signature_due, "review_release": self._on_review_release_due,
+                    "ico_filing": self._on_ico_filing_due, "gc_decision": self._on_gc_decision_due,
+                    "ai_signoff": self._on_ai_signoff_due}
+        while True:
+            due = [i for i in self.state["scheduled"] if i["due_day"] <= self.clock.day]
+            if not due:
+                return out
+            item = due[0]
+            self.state["scheduled"].remove(item)
+            out.extend(handlers[item["kind"]](item["payload"]) or [])
 
     def _narrative(self, prompt: str) -> str:
         """Optional LLM-written note; deterministic with MockLLM and never required for logic."""
@@ -492,16 +505,16 @@ class LegalAgent(DepartmentAgent):
                                 due_in_days=REVIEW_SLA_DAYS[position],
                                 priority="high" if position == "escalated" else "medium")
         record["review_task"] = task.id
-        self._internal("legal.internal.review_release_due", {"contract_id": contract_id},
+        self._schedule("review_release", {"contract_id": contract_id},
                        REVIEW_SLA_DAYS[position])
         self.log_event("legal.activity.contract_draft_prepared", body["summary"], contract_id=contract_id,
                        deal_id=deal_id, status=status, severity=severity,
                        review_sla_days=REVIEW_SLA_DAYS[position])
         return out
 
-    def _on_review_release_due(self, msg: Message) -> list[Message]:
+    def _on_review_release_due(self, payload: dict) -> list[Message]:
         """Models the human lawyer finishing the review and releasing the first draft to the client."""
-        c = self.state["contracts"].get(msg.body.get("contract_id", ""))
+        c = self.state["contracts"].get(payload.get("contract_id", ""))
         if not c or c["released"] or "draft_body" not in c:
             return []
         if c["status"] == "cancelled":
@@ -523,7 +536,7 @@ class LegalAgent(DepartmentAgent):
                      "due_day": self.clock.day + SIGNATURE_LEAD_DAYS[c["position"]]})
         out = [self._pub("legal.contract_drafted", body, reply_to=reply_to)]
         if c["status"] == "awaiting_signature":
-            self._internal("legal.internal.signature_due", {"contract_id": c["contract_id"]},
+            self._schedule("signature", {"contract_id": c["contract_id"]},
                            SIGNATURE_LEAD_DAYS[c["position"]])
         self.log_event("legal.activity.contract_drafted", body["summary"], contract_id=c["contract_id"],
                        deal_id=c["deal_id"], status=c["status"], turnaround_days=body["turnaround_days"])
@@ -593,18 +606,18 @@ class LegalAgent(DepartmentAgent):
                 if not c["approvals_pending"]:
                     c["status"] = "awaiting_signature"
                     if c["released"]:   # otherwise the review release schedules the signature
-                        self._internal("legal.internal.signature_due", {"contract_id": c["contract_id"]},
+                        self._schedule("signature", {"contract_id": c["contract_id"]},
                                        SIGNATURE_LEAD_DAYS.get(c["position"], 5))
         self.log_event("legal.activity.deal_decision_recorded", f"{deal_id} {decision}", deal_id=deal_id,
                        decision=decision)
         return []
 
-    def _on_signature_due(self, msg: Message) -> list[Message]:
+    def _on_signature_due(self, payload: dict) -> list[Message]:
         """Models the human authorised signatory executing the contract (agents never sign)."""
-        c = self.state["contracts"].get(msg.body.get("contract_id", ""))
+        c = self.state["contracts"].get(payload.get("contract_id", ""))
         if not c or c["status"] != "awaiting_signature" or not c.get("released", True):
             self.log_event("legal.activity.signature_skipped", "no contract awaiting signature",
-                           contract_id=msg.body.get("contract_id", ""))
+                           contract_id=payload.get("contract_id", ""))
             return []
         c["status"] = "signed"
         c["signed_day"] = self.clock.day
@@ -623,7 +636,7 @@ class LegalAgent(DepartmentAgent):
             body["minimum_term_months"] = KEEP_MIN_TERM_MONTHS
         if c.get("engagement_id"):
             body["engagement_id"] = c["engagement_id"]
-        return [self._pub("legal.contract_signed", body, reply_to=msg.id)]
+        return [self._pub("legal.contract_signed", body)]
 
     # ------------------------------------------------------------------------------------------------
     # General Counsel escalations (KPI gc_escalation_response_hours)
@@ -638,15 +651,15 @@ class LegalAgent(DepartmentAgent):
         esc_id = self._next("ESC")
         self.state["escalations"][esc_id] = {"escalation_id": esc_id, "kind": kind, "ref": ref,
                                              "raised_day": self.clock.day, "decided_day": None}
-        self._internal("legal.internal.gc_decision_due", {"escalation_id": esc_id},
+        self._schedule("gc_decision", {"escalation_id": esc_id},
                        GC_DECISION_HOURS // 24)
         self.log_event("legal.activity.escalation_raised", f"{kind} {ref} escalated to General Counsel",
                        escalation_id=esc_id, kind=kind, ref=ref)
         return esc_id
 
-    def _on_gc_decision_due(self, msg: Message) -> list[Message]:
+    def _on_gc_decision_due(self, payload: dict) -> list[Message]:
         """Models the General Counsel (human) recording a decision on an escalation."""
-        esc = self.state["escalations"].get(msg.body.get("escalation_id", ""))
+        esc = self.state["escalations"].get(payload.get("escalation_id", ""))
         if not esc or esc["decided_day"] is not None:
             return []
         esc["decided_day"] = self.clock.day
@@ -808,9 +821,7 @@ class LegalAgent(DepartmentAgent):
         if not c["released"]:
             # client confirmed before the human review released the draft: the release schedules signature
             return []
-        return self._on_signature_due(self.bus.make_message("legal", "legal", "legal.internal.signature_due",
-                                                            {"contract_id": c["contract_id"]},
-                                                            sim_time=self.clock.day))
+        return self._on_signature_due({"contract_id": c["contract_id"]})
 
     def _on_renewal_proposal_sent(self, msg: Message) -> list[Message]:
         b = msg.body
@@ -891,21 +902,22 @@ class LegalAgent(DepartmentAgent):
             self.create_task(f"General Counsel with CISO and CEO: decide and file ICO report for "
                              f"{incident_id} before day {breach['deadline_day']}", due_in_days=1,
                              priority="critical")
-            self._internal("legal.internal.ico_filing_due", {"incident_id": incident_id}, 1)
+            self._schedule("ico_filing", {"incident_id": incident_id}, 1)
         self.log_event("legal.activity.breach_assessed", f"{incident_id} risk={risk} notifiable={notifiable}",
                        incident_id=incident_id, risk=risk, notifiable=notifiable, role=role,
                        deadline_day=breach["deadline_day"])
         return []
 
-    def _on_ico_filing_due(self, msg: Message) -> list[Message]:
+    def _on_ico_filing_due(self, payload: dict) -> list[Message]:
         """Models the General Counsel (human) filing the ICO report; the agent only records and announces it."""
-        incident_id = msg.body.get("incident_id", "")
+        incident_id = payload.get("incident_id", "")
         breach = self.state["breaches"].get(incident_id)
         if not breach or breach["filed"] or not breach["notifiable"]:
             return []
         breach["filed"] = True
         elapsed = (self.clock.day - breach["aware_day"]) * 24
         within = elapsed <= ICO_DEADLINE_HOURS
+        breach["within_72h"] = within
         body = {"incident_id": incident_id, "client_id": breach["client_id"], "regulator": "ICO",
                 "filing_ref": self._next("LEGAL-ICO"), "deadline_hours": ICO_DEADLINE_HOURS,
                 "hours_elapsed": elapsed, "within_72h": within, "risk_to_individuals": breach["risk"],
@@ -1032,7 +1044,7 @@ class LegalAgent(DepartmentAgent):
                          else "medium")
         self.state["ai_reviews"][review_id] = {"requested_day": max(0, min(self.clock.day, msg.sim_time)),
                                                "signoff_day": None}
-        self._internal("legal.internal.ai_signoff_due", {"review_id": review_id}, AI_SIGNOFF_DAYS)
+        self._schedule("ai_signoff", {"review_id": review_id}, AI_SIGNOFF_DAYS)
         self.log_event("legal.activity.ai_risk_reviewed", f"{review_id} tier={info['risk_tier']}",
                        review_id=review_id, risk_tier=info["risk_tier"])
         return [self._pub("legal.ai_risk_review_completed", {
@@ -1044,13 +1056,13 @@ class LegalAgent(DepartmentAgent):
             "summary": f"AI risk review {review_id}: {info['risk_tier']}, {len(info['conditions'])} condition(s)"},
             reply_to=msg.id)]
 
-    def _on_ai_signoff_due(self, msg: Message) -> list[Message]:
+    def _on_ai_signoff_due(self, payload: dict) -> list[Message]:
         """Models the General Counsel signing off the AI risk recommendation (stops the KPI clock)."""
-        rev = self.state["ai_reviews"].get(msg.body.get("review_id", ""))
+        rev = self.state["ai_reviews"].get(payload.get("review_id", ""))
         if not rev or rev["signoff_day"] is not None:
             return []
         rev["signoff_day"] = self.clock.day
-        self.log_event("legal.activity.ai_risk_signed_off", f"{msg.body.get('review_id', '')} signed off by GC",
+        self.log_event("legal.activity.ai_risk_signed_off", f"{payload.get('review_id', '')} signed off by GC",
                        days=self.clock.day - rev["requested_day"])
         return []
 
@@ -1288,10 +1300,12 @@ class LegalAgent(DepartmentAgent):
         if decided:
             actual["gc_escalation_response_hours"] = mean([(e["decided_day"] - e["raised_day"]) * 24.0
                                                            for e in decided])
-        notifiable = [b for b in self.state["breaches"].values() if b["notifiable"]]
+        # notifiable breaches that are filed, or unfiled and already past the 72-hour deadline day
+        notifiable = [b for b in self.state["breaches"].values()
+                      if b["notifiable"] and (b["filed"] or self.clock.day >= b["deadline_day"])]
         if notifiable:
             actual["breach_notification_within_72h_pct"] = 100.0 * sum(
-                1 for b in notifiable if b["filed"] and not b["breached_deadline"]) / len(notifiable)
+                1 for b in notifiable if b["filed"] and b.get("within_72h")) / len(notifiable)
         if self.state["triage_days"]:
             actual["regulatory_triage_days"] = mean(self.state["triage_days"])
         signed_off = [r for r in self.state["ai_reviews"].values() if r["signoff_day"] is not None]
