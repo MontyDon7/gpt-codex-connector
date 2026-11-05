@@ -5,7 +5,7 @@ These procedures govern the `marketing` department (brand, demand generation, co
 Conventions used throughout:
 
 - Steps are marked `[human]` or `[agent]`. Agents draft, analyse, score, monitor and propose; they never publish externally-attributed claims, approve spend above £10,000, or release client names without the human approvals named in the SOP (COMPANY.md §9.4).
-- Role names are working titles: **CMO** (Sofia Lindqvist), **Demand Generation Lead**, **Content and Events Lead**, and the marketing agents **Lead Qualification Agent**, **Content Drafting Agent** and **Campaign Analytics Agent**. Each agent has the CMO or a named lead as accountable owner and is listed in the agent register (COMPANY.md §9.4).
+- Role names are working titles: **CMO** (Sofia Lindqvist), **Demand Generation Lead**, **Content Marketing Specialist**, **Events Specialist**, **Senior Product Marketing Specialist**, and the marketing agents **Lead Qualification Agent**, **Content Drafting Agent** and **Campaign Analytics Agent**. Each agent has the CMO or a named lead as accountable owner and is listed in the agent register (COMPANY.md §9.4).
 - "Business day" means Monday to Friday excluding UK bank holidays. SLAs are measured from message receipt on the bus.
 - Business IDs follow CONVENTIONS.md §4: lead `LD-00001`, client `CL-0001`, deal `DL-0001`, budget cycle `BUD-2026`, requisition `REQ-0001`. Marketing adds three department-local IDs: campaign `CMP-2026-01`, content item `CNT-2026-001`, event `EVT-2026-01`.
 - Email and outbound controls common to every SOP: UK GDPR and DPA 2018 lawful basis recorded per contact (legitimate interest for corporate B2B contacts, consent for individuals and sole traders), PECR opt-out honoured within 1 business day via the central suppression list, ASA/CAP Code substantiation for every performance claim, no client name, logo or quote without written client approval.
@@ -18,39 +18,39 @@ Conventions used throughout:
 | SOP-MARKETING-02 | Sales-accepted lead feedback loop | `sales.lead_qualified` | Demand Generation Lead | Attribution updated within 2 business days |
 | SOP-MARKETING-03 | Lost-deal analysis and nurture re-entry | `sales.deal_lost` | Demand Generation Lead | Reason coded within 3 business days; nurture within 10 |
 | SOP-MARKETING-04 | Campaign planning, approval and launch | `executive.okrs_set` or `executive.strategy_updated` | CMO | Quarterly plan within 10 business days of trigger; each campaign brief to launch within 15 business days |
-| SOP-MARKETING-05 | Content production and publication | `product.release_shipped`, `product.agent_capability_added`, `product.roadmap_published` or `data.benchmark_ready` | Content and Events Lead | First draft within 3 business days; publication within 8 business days |
-| SOP-MARKETING-06 | Case study request and harvest | Monthly schedule (first business day) | Content and Events Lead | Requests raised within 2 business days of cut-off |
-| SOP-MARKETING-07 | Case study approval and publication | `customer_success.case_study_approved` | Content and Events Lead | Published within 10 business days of approval |
-| SOP-MARKETING-08 | Event scheduling and follow-up | Quarterly schedule (first business day of quarter) | Content and Events Lead | Event announced at least 28 days ahead; follow-up within 2 business days of event |
+| SOP-MARKETING-05 | Content production and publication | `product.release_shipped`, `product.agent_capability_added`, `product.roadmap_published` or `data.benchmark_ready` | Content Marketing Specialist | First draft within 3 business days; publication within 8 business days |
+| SOP-MARKETING-06 | Case study request and harvest | Monthly schedule (first business day) | Senior Product Marketing Specialist | Requests raised within 2 business days of cut-off |
+| SOP-MARKETING-07 | Case study approval and publication | `customer_success.case_study_approved` | Senior Product Marketing Specialist | Published within 10 business days of approval |
+| SOP-MARKETING-08 | Event scheduling and follow-up | Quarterly schedule (first business day of quarter) | Events Specialist | Event announced at least 28 days ahead; follow-up within 2 business days of event |
 | SOP-MARKETING-09 | Brand incident detection and escalation | Daily brand-monitoring schedule | CMO | Triage within 2 hours (business hours); escalation within 4 hours |
 | SOP-MARKETING-10 | Crisis communications standstill | `executive.crisis_declared` | CMO | Outbound paused within 1 hour; holding statement drafted within 4 hours |
 | SOP-MARKETING-11 | Pricing change collateral refresh | `executive.pricing_change_approved` | Demand Generation Lead | Public price references corrected within 3 business days |
 | SOP-MARKETING-12 | Annual budget submission | `finance.budget_cycle_opened` and `executive.budget_approved` | CMO | Submission by cycle deadline; approved envelope loaded within 5 business days |
 | SOP-MARKETING-13 | Marketing hiring request and job advertising | `people.job_posted` | CMO | Requisition rationale within 5 business days of need; job post amplified within 3 business days |
-| SOP-MARKETING-14 | Client feedback and voice-of-customer capture | `customer_success.feedback_received` | Content and Events Lead | Coded within 5 business days |
+| SOP-MARKETING-14 | Client feedback and voice-of-customer capture | `customer_success.feedback_received` | Content Marketing Specialist | Coded within 5 business days |
 | SOP-MARKETING-15 | Monthly marketing performance review | Monthly schedule (3rd business day) | CMO | Pack issued by business day 5 |
 
 ## SOP-MARKETING-01: Inbound lead intake, scoring and hand-off
 
-**Owner:** Demand Generation Lead (accountable: CMO). Agent: Lead Qualification Agent.
-**Trigger:** `external.lead_inbound` (website form, event badge scan, webinar registration, referral, direct email to the shared inbox, partner introduction).
-**Inputs:** message body keys `lead_id`, `company`, `contact_name`, `contact_role`, `employees`, `sector`, `source`, `message`; Companies House record; consent and lawful-basis flag; existing CRM records (to detect existing clients and open deals).
+**Owner**: Demand Generation Lead (accountable: CMO). Agent: Lead Qualification Agent.
+**Trigger**: `external.lead_inbound` (website form, event badge scan, webinar registration, referral, direct email to the shared inbox, partner introduction).
+**Inputs**: message body keys `lead_id`, `company`, `contact_name`, `contact_role`, `employees`, `sector`, `source`, `message`, `interest`, `email`; Companies House record; consent and lawful-basis flag; existing CRM records (to detect existing clients and open deals).
 
 ### Steps
 
 1. [agent] Validate the payload: required keys present, email syntax valid, no duplicate `lead_id` within the last 90 days; on duplicate, merge and stop.
 2. [agent] Check the suppression list and consent flag. Suppressed or opted-out contacts are recorded and closed with no further action.
 3. [agent] Enrich: employee count, sector, UK or US registration, ownership (exclude companies where Lumenhall already has an open deal; route those to the owning account executive without creating a new lead).
-4. [agent] Score 0 to 100 using the lead-scoring model: ICP fit 50 points (200 to 2,000 employees = 20; target sector among financial services, healthcare services, logistics, manufacturing, retail, professional services = 15; board-level or director-and-above contact = 15), intent 30 points (named pain point in message = 10; requested a conversation or diagnostic = 15; repeat visit to pricing page or two or more content downloads = 5), source quality 20 points (referral or partner = 20; event or webinar = 14; organic or paid search = 10; cold list = 4).
-5. [agent] Classify: score 60 or above is a marketing-qualified lead (MQL); 40 to 59 goes to nurture; below 40 is recorded and closed with a polite automated reply.
+4. [agent] Score 0 to 100 using the lead-scoring model: ICP fit 50 points (200 to 2,000 employees = 20, 50 to 199 or above 2,000 = 8; target sector among financial services, healthcare services, logistics, manufacturing, retail, professional services = 15; board-level or director-and-above contact = 15), intent 30 points (named pain point in `message` or `summary` = 10; requested a conversation or diagnostic (`interest`) = 15; repeat visit to pricing page or two or more content downloads = 5), source quality 20 points (referral or partner = 20; event or webinar = 14; organic or paid search, website form or direct = 10; paid social = 6; cold list = 4). Free-mail addresses subtract 30; non-buyer personas (student, intern, researcher, journalist) subtract 50.
+5. [agent] Classify against one MQL threshold of 60: score 60 or above is a marketing-qualified lead (`stage` = `mql`); any lower score is a lead at `stage` = `nurture` (also enrolled in the 90-day nurture sequence). Both are leads for the 640 / 1,200 / 2,267 target, of which 25% qualify downstream (COMPANY.md §5.3). Only non-buyer personas and free-mail contacts scoring below 25 are closed with a polite automated reply and no bus message.
 6. [human] Demand Generation Lead reviews every MQL scoring 60 to 74 and every lead from a company above 2,000 employees or outside the UK before hand-off (sampling 10% of 75-plus scores weekly for model drift).
-7. [agent] For accepted MQLs, assemble the hand-off record: summary of pain point, suggested service line (`compass`, `forge` or `keep`), source, and a recommended first call objective. Do not quote prices in the record beyond COMPANY.md §3 list prices.
-8. [agent] Publish `marketing.lead_generated` to sales and data; log an activity event with the score breakdown so the decision is auditable.
+7. [agent] For every lead that is not closed, assemble the hand-off record: summary of pain point, suggested service line (`compass`, `forge` or `keep`), source, and a recommended first call objective. Do not quote prices in the record beyond COMPANY.md §3 list prices.
+8. [agent] Publish `marketing.lead_generated` to sales and data (agent: one day after receipt, `delay_days` = 1); log an activity event with the score breakdown so the decision is auditable.
 9. [agent] Send the contact an acknowledgement from the shared inbox, naming a response window of 2 business days.
 
 ### Outputs and messages
 
-- `marketing.lead_generated` (to `sales`, `data`): `lead_id`, `company`, `contact_name`, `contact_role`, `employees`, `sector`, `score`, `source`, `service_line`, `summary`, `severity` (`low`, `medium` or `high` mapped from score bands 60 to 69, 70 to 84, 85 and above).
+- `marketing.lead_generated` (to `sales`, `data`): `lead_id`, `company`, `client_name` (same as `company`), `contact_name`, `contact_role`, `employees`, `sector`, `source`, `score`, `stage` (`mql` or `nurture`), `score_reasons`, `service_line`, `tier`, `amount_gbp` (entry-tier list price, COMPANY.md §3), `summary`, `severity` (`low` below 70, `medium` for 70 to 84, `high` for 85 and above).
 - Internal state: lead ledger entry (`stage` = `mql` | `nurture` | `closed`), running count against the 640-lead FY2026 target (COMPANY.md §5.3).
 - Activity log: `marketing.activity.lead_scored`.
 
@@ -69,9 +69,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-02: Sales-accepted lead feedback loop
 
-**Owner:** Demand Generation Lead. Agent: Campaign Analytics Agent.
-**Trigger:** `sales.lead_qualified` (sales has accepted a lead as a qualified opportunity).
-**Inputs:** body keys `lead_id`, `deal_id`, `client_name`, `service_line`, `amount_gbp` (estimated), `owner`; the originating marketing lead record; campaign and content touch history.
+**Owner**: Demand Generation Lead. Agent: Campaign Analytics Agent.
+**Trigger**: `sales.lead_qualified` (sales has accepted a lead as a qualified opportunity).
+**Inputs**: body keys `lead_id`, `deal_id`, `client_name`, `service_line`, `amount_gbp` (estimated), `owner`; the originating marketing lead record; campaign and content touch history.
 
 ### Steps
 
@@ -80,7 +80,7 @@ Conventions used throughout:
 3. [agent] Update the running conversion metrics: lead-to-qualified rate against the 25% benchmark (COMPANY.md §5.3), cost per qualified opportunity by channel, and pipeline value sourced.
 4. [agent] If the lead's score was 60 to 74 and it converted, flag it as a model learning case for the weekly audit.
 5. [human] Demand Generation Lead reviews any week in which lead-to-qualified falls below 20% or exceeds 35% and decides whether to tighten or relax the 60-point MQL threshold (recorded decision, effective next Monday).
-6. [agent] Create a task for the Content and Events Lead if the opportunity cites a content gap (for example "asked for an example in logistics"); this feeds SOP-MARKETING-05.
+6. [agent] Create a task for the Content Marketing Specialist if the opportunity cites a content gap (for example "asked for an example in logistics"); this feeds SOP-MARKETING-05.
 
 ### Outputs and messages
 
@@ -100,15 +100,15 @@ Conventions used throughout:
 
 ## SOP-MARKETING-03: Lost-deal analysis and nurture re-entry
 
-**Owner:** Demand Generation Lead. Agents: Campaign Analytics Agent, Lead Qualification Agent.
-**Trigger:** `sales.deal_lost`.
-**Inputs:** body keys `deal_id`, `client_name`, `reason` (price, competitor, timing, scope, no-decision, security), `competitor`, `amount_gbp`, `service_line`; the marketing record for the originating lead.
+**Owner**: Demand Generation Lead. Agents: Campaign Analytics Agent, Lead Qualification Agent.
+**Trigger**: `sales.deal_lost`.
+**Inputs**: body keys `deal_id`, `client_name`, `reason` (price, competitor, timing, scope, no-decision, security), `competitor`, `amount_gbp`, `service_line`; the marketing record for the originating lead.
 
 ### Steps
 
 1. [agent] Code the loss reason into the marketing taxonomy (price, competitor, timing, fit, trust and proof, no decision) and attach to the lead record.
 2. [agent] If the originating lead came from marketing, compute the cost of acquisition spent on it (channel cost allocation plus event cost share) and add to the lost-opportunity cost ledger.
-3. [agent] Identify messaging gaps: if two or more losses in a rolling 30 days share a reason (for example "trust and proof" in financial services), raise a task for the Content and Events Lead to commission a proof asset (case study, benchmark or reference call pack).
+3. [agent] Identify messaging gaps: if two or more losses in a rolling 30 days share a reason (for example "trust and proof" in financial services), raise a task for the Content Marketing Specialist to commission a proof asset (case study, benchmark or reference call pack).
 4. [human] Demand Generation Lead decides re-entry: `timing` and `no decision` losses re-enter nurture at 90 days; `competitor` and `price` losses re-enter at 180 days with a competitor-comparison asset; `security` losses re-enter only after the relevant certification milestone (COMPANY.md §8, assumption 7).
 5. [agent] Schedule the nurture re-entry with `delay_days` and write the planned date to state; suppress marketing email to the contact in the interim except transactional messages.
 6. [agent] Add the competitor to the competitive-intelligence watchlist if named in two or more losses.
@@ -131,9 +131,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-04: Campaign planning, approval and launch
 
-**Owner:** CMO (execution: Demand Generation Lead). Agents: Campaign Analytics Agent, Content Drafting Agent.
-**Trigger:** `executive.okrs_set` or `executive.strategy_updated` (quarterly plan refresh); individual campaign briefs are raised from the approved quarterly plan.
-**Inputs:** OKRs and strategy body keys (`period`, `objectives`, `priorities`, `target_sectors`); the approved marketing budget (SOP-MARKETING-12); funnel targets from COMPANY.md §5.3; last quarter's performance pack.
+**Owner**: CMO (execution: Demand Generation Lead). Agents: Campaign Analytics Agent, Content Drafting Agent.
+**Trigger**: `executive.okrs_set` or `executive.strategy_updated` (quarterly plan refresh); individual campaign briefs are raised from the approved quarterly plan.
+**Inputs**: OKRs and strategy body keys (`period`, `objectives`, `priorities`, `target_sectors`); the approved marketing budget (SOP-MARKETING-12); funnel targets from COMPANY.md §5.3; last quarter's performance pack.
 
 ### Steps
 
@@ -141,7 +141,7 @@ Conventions used throughout:
 2. [agent] Draft the quarterly plan: 3 to 5 campaigns with audience, offer, channels, budget, expected leads and cost per lead, owner and kill criteria.
 3. [human] CMO reviews and approves the plan. Any single campaign above £50k non-budgeted spend needs CFO approval, above £250k CEO approval (COMPANY.md §9.3).
 4. [agent] For each approved campaign create the brief and the campaign record `CMP-YYYY-NN`; draft messaging, landing page copy and email sequence; assemble the target account list (200 to 2,000 employees in target sectors).
-5. [human] Content and Events Lead and Demand Generation Lead run the pre-launch checklist: ASA/CAP claim substantiation, UK GDPR lawful basis on every list, PECR suppression run within 24 hours of send, tracking tags tested, brand review, sales briefed with a one-page enablement note.
+5. [human] Content Marketing Specialist and Demand Generation Lead run the pre-launch checklist: ASA/CAP claim substantiation, UK GDPR lawful basis on every list, PECR suppression run within 24 hours of send, tracking tags tested, brand review, sales briefed with a one-page enablement note.
 6. [human] CMO signs off launch. For any campaign naming a regulated outcome (for example "FCA-compliant") the General Counsel's team reviews the copy first.
 7. [agent] On launch date, publish `marketing.campaign_launched` and start daily monitoring against the kill criteria (cost per lead more than 40% above plan after 2 weeks, or spam complaint rate above 0.1%).
 8. [human] Demand Generation Lead holds a fortnightly in-flight review; campaigns that miss kill criteria are paused or revised with a recorded decision.
@@ -150,7 +150,7 @@ Conventions used throughout:
 
 - `marketing.campaign_launched` (to `sales`, `finance`, `data`): `campaign_id`, `name`, `channel`, `target_sectors`, `budget_gbp`, `start_day`, `end_day`, `expected_leads`, `audience_size`, `summary`.
 - Finance uses `budget_gbp` to accrue programme spend; Data uses `campaign_id` for attribution joins.
-- Internal state: campaign ledger; tasks for the Content and Events Lead and Demand Generation Lead.
+- Internal state: campaign ledger; tasks for the Content Marketing Specialist and Demand Generation Lead.
 
 ### SLA and controls
 
@@ -165,16 +165,16 @@ Conventions used throughout:
 
 ## SOP-MARKETING-05: Content production and publication
 
-**Owner:** Content and Events Lead. Agent: Content Drafting Agent.
-**Trigger:** `product.release_shipped`, `product.agent_capability_added`, `product.roadmap_published` or `data.benchmark_ready`; also any task raised by SOP-MARKETING-02, -03 or -14.
-**Inputs:** the trigger body (`release_id`, `capability`, `summary`, `benchmark_id`, `metric`, `period`, `sector`); editorial calendar; brand guidelines; approved claims register.
+**Owner**: Content Marketing Specialist. Agent: Content Drafting Agent.
+**Trigger**: `product.release_shipped`, `product.agent_capability_added`, `product.roadmap_published` or `data.benchmark_ready`; also any task raised by SOP-MARKETING-02, -03 or -14.
+**Inputs**: the trigger body (`release_id`, `capability`, `summary`, `benchmark_id`, `metric`, `period`, `sector`); editorial calendar; brand guidelines; approved claims register.
 
 ### Steps
 
 1. [agent] Classify the trigger: product release or capability (launch post and sales one-pager), roadmap (customer-facing summary only, never dates beyond the committed quarter), benchmark (thought-leadership report and sector-specific cuts).
 2. [agent] Check the approved claims register. Any quantitative claim (for example "reduces cycle time by 30%") must cite a data source and sample; claims not on the register are flagged `needs_evidence`.
 3. [agent] Draft the asset: long-form article (1,200 to 1,800 words), LinkedIn post set (3 variants), sales one-pager, and where relevant a webinar outline; apply brand voice (plain, specific, British English, no unverified superlatives).
-4. [human] Content and Events Lead edits and fact-checks. Benchmarks derived from client data must be anonymised with a minimum cohort of 8 clients, confirmed by the Data department's note on the release.
+4. [human] Content Marketing Specialist edits and fact-checks. Benchmarks derived from client data must be anonymised with a minimum cohort of 8 clients, confirmed by the Data department's note on the release.
 5. [human] Subject-matter expert reviews technical accuracy (Product for releases, Data for benchmarks). Roadmap content additionally requires the Chief Product Officer's (Anika Rao) approval before anything forward-looking is published.
 6. [human] Legal review (General Counsel's team) is mandatory for: regulatory statements, comparisons with named competitors, AI safety or compliance claims (UK AI regulatory principles, EU AI Act alignment), and any client reference.
 7. [agent] Schedule publication in the editorial calendar and distribute (website, LinkedIn, newsletter, sales enablement folder).
@@ -182,7 +182,7 @@ Conventions used throughout:
 
 ### Outputs and messages
 
-- `marketing.content_published` (to `sales`): `content_id`, `title`, `format` (`article`, `report`, `webinar`, `one_pager`, `case_study`), `topic`, `service_line`, `sector`, `url`, `summary`, `published_day`.
+- `marketing.content_published` (to `sales`): `content_id`, `asset_id`, `title`, `format` (`article`, `report`, `webinar`, `one_pager`, `case_study`), `topic`, `service_line`, `sector`, `url`, `summary`, `published_day`.
 - Internal state: content ledger with approval trail (author agent, human editor, SME, legal where applicable).
 
 ### SLA and controls
@@ -193,22 +193,22 @@ Conventions used throughout:
 
 ### Exceptions and escalation
 
-- SME or Legal review overdue by more than 3 business days: Content and Events Lead escalates to the CMO, who escalates to the relevant department head.
+- SME or Legal review overdue by more than 3 business days: Content Marketing Specialist escalates to the CMO, who escalates to the relevant department head.
 - Factual error found after publication: correct within 1 business day, note the correction on the page and log `marketing.activity.content_corrected`; errors in client-facing claims go to SOP-MARKETING-09.
 
 ## SOP-MARKETING-06: Case study request and harvest
 
-**Owner:** Content and Events Lead. Agent: Content Drafting Agent.
-**Trigger:** Monthly schedule (first business day of the month); also an ad hoc request from the Chief Revenue Officer for a named proof gap.
-**Inputs:** list of completed engagements and high-health clients supplied by customer success; current proof gaps by sector and service line (from SOP-MARKETING-03); sector priority list.
+**Owner**: Senior Product Marketing Specialist. Agent: Content Drafting Agent.
+**Trigger**: Monthly schedule (first business day of the month); also an ad hoc request from the Chief Revenue Officer for a named proof gap.
+**Inputs**: list of completed engagements and high-health clients supplied by customer success; current proof gaps by sector and service line (from SOP-MARKETING-03); sector priority list.
 
 ### Steps
 
 1. [agent] Compile the candidate list: engagements completed in the last 60 days or retained clients with a health score at or above the healthy threshold, ranked by sector gap, measurable outcome and client advocacy.
-2. [human] Content and Events Lead selects up to 2 candidates per month in FY2026 (up to 4 per month from FY2027), prioritising proof for financial services, healthcare services and logistics.
+2. [human] Senior Product Marketing Specialist selects up to 2 candidates per month in FY2026 (up to 4 per month from FY2027), prioritising proof for financial services, healthcare services and logistics.
 3. [agent] Prepare the request pack: proposed headline, outcomes to quantify, interview questions, usage scope (name, logo, quote, metrics) and the permission wording agreed with Legal.
 4. [agent] Publish `marketing.case_study_requested` to customer success; record the request as `pending` with a chase date at 10 business days.
-5. [human] If there is no response by the chase date, Content and Events Lead contacts the customer success owner directly; the client is never approached by marketing without customer success consent.
+5. [human] If there is no response by the chase date, Senior Product Marketing Specialist contacts the customer success owner directly; the client is never approached by marketing without customer success consent.
 6. [agent] Close the request as `declined` if the client refuses or lapses after 30 business days; record the reason.
 
 ### Outputs and messages
@@ -229,15 +229,15 @@ Conventions used throughout:
 
 ## SOP-MARKETING-07: Case study approval and publication
 
-**Owner:** Content and Events Lead. Agent: Content Drafting Agent.
-**Trigger:** `customer_success.case_study_approved`.
-**Inputs:** body keys `client_id`, `client_name`, `engagement_id`, `approved_scope` (name, logo, quote, metrics), `approver` (client contact), `expiry_day`, `summary`; the pending request from SOP-MARKETING-06.
+**Owner**: Senior Product Marketing Specialist. Agent: Content Drafting Agent.
+**Trigger**: `customer_success.case_study_approved`.
+**Inputs**: body keys `client_id`, `client_name`, `engagement_id`, `approved_scope` (name, logo, quote, metrics), `approver` (client contact), `expiry_day`, `summary`; the pending request from SOP-MARKETING-06.
 
 ### Steps
 
 1. [agent] Match the approval to the pending request and verify `approved_scope`; if the scope is narrower than requested, restrict the draft accordingly (for example anonymised sector description only).
 2. [agent] Draft the case study (challenge, approach, outcome, quote) using only metrics confirmed by the client and the delivery team; mark every figure with its source.
-3. [human] Content and Events Lead interviews the client sponsor (30 minutes, recorded with consent) and finalises the draft.
+3. [human] Senior Product Marketing Specialist interviews the client sponsor (30 minutes, recorded with consent) and finalises the draft.
 4. [human] Client sponsor signs off the final copy in writing; customer success is copied.
 5. [human] Legal reviews the final text and the use of the logo and quote against the client's contract terms.
 6. [agent] Publish across the website, sales enablement library and LinkedIn; set the review date at 12 months or `expiry_day`, whichever is earlier.
@@ -261,16 +261,16 @@ Conventions used throughout:
 
 ## SOP-MARKETING-08: Event scheduling and follow-up
 
-**Owner:** Content and Events Lead. Agent: Campaign Analytics Agent.
-**Trigger:** Quarterly schedule (first business day of each quarter), plus ad hoc when the quarterly plan (SOP-MARKETING-04) approves a new event.
-**Inputs:** approved events budget; target sector calendar; speaker availability from delivery and executive; venue quotes; capacity in operations.
+**Owner**: Events Specialist. Agent: Campaign Analytics Agent.
+**Trigger**: Quarterly schedule (first business day of each quarter), plus ad hoc when the quarterly plan (SOP-MARKETING-04) approves a new event.
+**Inputs**: approved events budget; target sector calendar; speaker availability from delivery and executive; venue quotes; capacity in operations.
 
 ### Steps
 
 1. [agent] Propose the event calendar for the quarter: client roundtables (20 to 30 attendees, London), sector breakfasts (40 to 60), webinars (100 to 300 registrants) and third-party conferences (sponsorship or speaking only). FY2026 allocation is mostly roundtables and webinars; US events begin only after the New York office opens in Q1 FY2027 (COMPANY.md §1).
 2. [agent] Estimate cost per event (venue, catering, speakers, invitations) and expected leads, and compute cost per qualified opportunity assuming the 25% lead qualification benchmark (COMPANY.md §5.3).
 3. [human] CMO approves the calendar; any sponsorship above £50k non-budgeted needs CFO approval (COMPANY.md §9.3).
-4. [human] Content and Events Lead books the venue and speakers, issues the Calendar hold and agrees on the run-of-show with operations.
+4. [human] Events Specialist books the venue and speakers, issues the Calendar hold and agrees on the run-of-show with operations.
 5. [agent] Publish `marketing.event_scheduled` to sales and operations at least 28 days before the event, with attendees' capacity, venue and logistics needs.
 6. [agent] Run invitation sequences to the target account list and sales-nominated clients; handle registration within the UK GDPR consent rules.
 7. [human] Event day: staff the event, capture badge scans, record attendee feedback.
@@ -289,14 +289,14 @@ Conventions used throughout:
 
 ### Exceptions and escalation
 
-- Speaker drop-out within 7 days: Content and Events Lead appoints a named substitute from delivery and informs the CMO; if no substitute, convert to a virtual session.
+- Speaker drop-out within 7 days: Events Specialist appoints a named substitute from delivery and informs the CMO; if no substitute, convert to a virtual session.
 - Attendance below 50% of registrants: send a recording to no-shows within 24 hours; operations is notified if venue catering must be reduced.
 
 ## SOP-MARKETING-09: Brand incident detection and escalation
 
-**Owner:** CMO. Agent: Campaign Analytics Agent (monitoring).
-**Trigger:** Daily brand-monitoring schedule (social, press, review sites, search results) and any inbound report from staff, clients or sales.
-**Inputs:** monitoring feed; brand guidelines; list of approved spokespeople; incident severity matrix.
+**Owner**: CMO. Agent: Campaign Analytics Agent (monitoring).
+**Trigger**: Daily brand-monitoring schedule (social, press, review sites, search results) and any inbound report from staff, clients or sales.
+**Inputs**: monitoring feed; brand guidelines; list of approved spokespeople; incident severity matrix.
 
 ### Steps
 
@@ -311,7 +311,7 @@ Conventions used throughout:
 
 ### Outputs and messages
 
-- `marketing.brand_incident_raised` (to `executive`, `legal`): `incident_ref`, `severity`, `category` (`misinformation`, `impersonation`, `client_complaint`, `confidentiality`, `press`, `regulatory`), `channel`, `reach_estimate`, `summary`, `recommended_action`, `due_day`.
+- `marketing.brand_incident_raised` (to `executive`, `legal`): `incident_id`, `severity`, `category` (`misinformation`, `impersonation`, `client_complaint`, `confidentiality`, `press`, `regulatory`), `channel`, `reach_estimate`, `summary`, `recommended_action`, `due_day`.
 - Internal state: incident log with timestamps, decisions and approver.
 
 ### SLA and controls
@@ -327,9 +327,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-10: Crisis communications standstill
 
-**Owner:** CMO. Agents: Content Drafting Agent, Campaign Analytics Agent.
-**Trigger:** `executive.crisis_declared`.
-**Inputs:** body keys `crisis_id`, `category`, `severity`, `summary`, `spokesperson`, `comms_lead`; scheduled outbound calendar; live campaign ledger.
+**Owner**: CMO. Agents: Content Drafting Agent, Campaign Analytics Agent.
+**Trigger**: `executive.crisis_declared`.
+**Inputs**: body keys `crisis_id`, `category`, `severity`, `summary`, `spokesperson`, `comms_lead`; scheduled outbound calendar; live campaign ledger.
 
 ### Steps
 
@@ -360,9 +360,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-11: Pricing change collateral refresh
 
-**Owner:** Demand Generation Lead. Agent: Content Drafting Agent.
-**Trigger:** `executive.pricing_change_approved`.
-**Inputs:** body keys `service_line`, `tier`, `old_price_gbp`, `new_price_gbp`, `effective_day`, `rationale`; the current list in COMPANY.md §3; inventory of assets containing prices.
+**Owner**: Demand Generation Lead. Agent: Content Drafting Agent.
+**Trigger**: `executive.pricing_change_approved`.
+**Inputs**: body keys `service_line`, `tier`, `old_price_gbp`, `new_price_gbp`, `effective_day`, `rationale`; the current list in COMPANY.md §3; inventory of assets containing prices.
 
 ### Steps
 
@@ -370,7 +370,7 @@ Conventions used throughout:
 2. [agent] Draft updated copy for each asset; prices are always in GBP ex-VAT; US prices in USD at the planning rate in COMPANY.md §1 once the US launches.
 3. [human] Demand Generation Lead confirms that no price is published before `effective_day`, and checks that grandfathered or in-flight proposals are left unchanged by sales.
 4. [agent] Schedule the website and library updates for `effective_day`; withdraw superseded PDFs and add a redirect.
-5. [human] Content and Events Lead checks every public-facing page after the update; a second person verifies a 10% sample of internal assets.
+5. [human] Content Marketing Specialist checks every public-facing page after the update; a second person verifies a 10% sample of internal assets.
 6. [agent] Notify the sales team through the enablement library and the sales channel on the same day.
 7. [human] CMO reviews whether messaging needs adjusting (for example a rise on Forge Pilot affecting the land-and-expand story) and records any new positioning.
 
@@ -392,9 +392,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-12: Annual budget submission
 
-**Owner:** CMO. Agent: Campaign Analytics Agent.
-**Trigger:** `finance.budget_cycle_opened` (opens in Q4); approval step triggered by `executive.budget_approved`.
-**Inputs:** body keys `budget_cycle` (`BUD-2026` format), `deadline_day`, `guidance`; previous year actuals; funnel targets (COMPANY.md §5.3); headcount plan (COMPANY.md §6.1); CAC target (COMPANY.md §5.3).
+**Owner**: CMO. Agent: Campaign Analytics Agent.
+**Trigger**: `finance.budget_cycle_opened` (opens in Q4); approval step triggered by `executive.budget_approved`.
+**Inputs**: body keys `budget_cycle` (`BUD-2026` format), `deadline_day`, `guidance`; previous year actuals; funnel targets (COMPANY.md §5.3); headcount plan (COMPANY.md §6.1); CAC target (COMPANY.md §5.3).
 
 ### Steps
 
@@ -409,7 +409,7 @@ Conventions used throughout:
 
 ### Outputs and messages
 
-- `marketing.budget_submitted` (to `finance`): `budget_cycle`, `department` = `marketing`, `amount_gbp` (total), `people_gbp`, `non_people_gbp`, `headcount_humans`, `headcount_agents`, `assumptions`, `summary`.
+- `marketing.budget_submitted` (to `finance`): `budget_cycle`, `fiscal_year`, `department` = `marketing`, `amount_gbp` (total), `people_gbp`, `non_people_gbp`, `lead_target`, `summary`.
 - Internal state: approved budget, quarterly phasing, committed spend and variance tracker.
 
 ### SLA and controls
@@ -425,9 +425,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-13: Marketing hiring request and job advertising
 
-**Owner:** CMO. Agent: Campaign Analytics Agent (capacity analysis); Content Drafting Agent (job advertising copy).
-**Trigger:** `people.job_posted` (a marketing or company role is advertised and marketing amplifies it); hiring requests originate from the capacity trigger below.
-**Inputs:** body keys `requisition_id`, `role`, `department`, `location`, `salary_band_gbp`, `posting_url`, `closing_day`; marketing hiring plan; employer-brand assets.
+**Owner**: CMO. Agent: Campaign Analytics Agent (capacity analysis); Content Drafting Agent (job advertising copy).
+**Trigger**: `people.job_posted` (a marketing or company role is advertised and marketing amplifies it); hiring requests originate from the capacity trigger below.
+**Inputs**: body keys `requisition_id`, `role_title`, `department`, `location`, `salary_band_gbp`, `posting_url`, `closing_day`; marketing hiring plan; employer-brand assets.
 
 ### Steps
 
@@ -436,12 +436,12 @@ Conventions used throughout:
 3. [agent] Publish `marketing.hire_requested` to people with the role, level, rationale and start date; the CEO approves new headcount outside budget (COMPANY.md §9.3).
 4. [human] People department opens the requisition; marketing does not advertise a role before `people.job_posted` is received.
 5. [agent] On `people.job_posted`, draft employer-brand posts, targeted outreach to relevant communities and a careers page link for the role; check that salary bands are shown if the job advertisement is required to state them.
-6. [human] CMO or Content and Events Lead approves the copy and the paid recruitment budget (capped at £2,000 per role without CMO sign-off).
+6. [human] CMO or Content Marketing Specialist approves the copy and the paid recruitment budget (capped at £2,000 per role without CMO sign-off).
 7. [agent] Report applications by source to People weekly until the role closes.
 
 ### Outputs and messages
 
-- `marketing.hire_requested` (to `people`): `role`, `level` (a level key from COMPANY.md §6.2), `department` = `marketing`, `justification`, `target_start_day`, `salary_band_gbp`, `budget_line`.
+- `marketing.hire_requested` (to `people`): `role_title`, `level` (a level key from COMPANY.md §6.2), `department` = `marketing`, `justification`, `target_start_day`, `salary_band_gbp`, `budget_line`.
 - Activity log: `marketing.activity.job_amplified` with `requisition_id`, channels and spend.
 
 ### SLA and controls
@@ -457,22 +457,22 @@ Conventions used throughout:
 
 ## SOP-MARKETING-14: Client feedback and voice-of-customer capture
 
-**Owner:** Content and Events Lead. Agent: Content Drafting Agent.
-**Trigger:** `customer_success.feedback_received`.
-**Inputs:** body keys `client_id`, `client_name`, `engagement_id`, `score` (NPS-style 0 to 10), `sentiment`, `themes`, `verbatim`, `summary`.
+**Owner**: Content Marketing Specialist. Agent: Content Drafting Agent.
+**Trigger**: `customer_success.feedback_received`.
+**Inputs**: body keys `client_id`, `client_name`, `engagement_id`, `score` (NPS-style 0 to 10), `sentiment`, `themes`, `verbatim`, `summary`.
 
 ### Steps
 
 1. [agent] Code the feedback by theme (outcomes, speed, communication, price, AI agent quality, support) and by sector; record `score` and sentiment on the client's marketing profile.
 2. [agent] Identify testimonial candidates: scores of 9 or 10 with a usable verbatim; add to the case study candidate pool (SOP-MARKETING-06) only with customer success consent.
 3. [agent] Identify messaging risks: any theme appearing in 3 or more negative pieces of feedback in a quarter is added to the monthly review.
-4. [human] Content and Events Lead reviews the themes, adapts messaging (for example removing a claim that clients say we under-deliver) and informs Product where themes concern agent quality.
+4. [human] Content Marketing Specialist reviews the themes, adapts messaging (for example removing a claim that clients say we under-deliver) and informs Product where themes concern agent quality.
 5. [agent] Remove clients scoring 6 or below from any promotional or newsletter segment pending a customer success decision; do not send marketing content to a client in an open escalation.
 6. [agent] Add the feedback to the voice-of-customer library; verbatims are tagged by consent status.
 
 ### Outputs and messages
 
-- No bus message by default. A qualifying positive testimonial results in a pending entry that triggers SOP-MARKETING-06; a negative theme raises a task for the Content and Events Lead.
+- No bus message by default. A qualifying positive testimonial results in a pending entry that triggers SOP-MARKETING-06; a negative theme raises a task for the Content Marketing Specialist.
 - Activity log: `marketing.activity.feedback_coded`.
 
 ### SLA and controls
@@ -488,9 +488,9 @@ Conventions used throughout:
 
 ## SOP-MARKETING-15: Monthly marketing performance review
 
-**Owner:** CMO. Agent: Campaign Analytics Agent.
-**Trigger:** Monthly schedule (third business day of the month, after the finance month-end close).
-**Inputs:** lead ledger; campaign and event ledgers; content metrics; approved budget and actuals; CRM pipeline and win data; Data department benchmark and KPI report.
+**Owner**: CMO. Agent: Campaign Analytics Agent.
+**Trigger**: Monthly schedule (third business day of the month, after the finance month-end close).
+**Inputs**: lead ledger; campaign and event ledgers; content metrics; approved budget and actuals; CRM pipeline and win data; Data department benchmark and KPI report.
 
 ### Steps
 

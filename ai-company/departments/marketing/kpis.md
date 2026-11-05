@@ -7,18 +7,18 @@ Department: `marketing` (agent class `MarketingAgent`), headed by the Chief Mark
 | KPI id | Name | Unit | FY2026 target | FY2027 target | FY2028 target | Direction | Frequency | Owner |
 |---|---|---|---|---|---|---|---|---|
 | leads_generated | Leads generated (`marketing.lead_generated`) | count / year | 640 | 1,200 | 2,267 | higher is better | weekly | Chief Marketing Officer |
-| lead_to_qualified_rate | Lead-to-qualified rate (leads accepted by Sales as `sales.lead_qualified`) | percent | 25.0 | 25.0 | 25.0 | higher is better | monthly | Demand Generation Manager |
-| lead_response_hours | Inbound lead first-touch time (business hours, `external.lead_inbound` to `marketing.lead_generated`) | hours (p90) | 8 | 6 | 4 | lower is better | weekly | Demand Generation Manager |
+| lead_to_qualified_rate | Lead-to-qualified rate (leads accepted by Sales as `sales.lead_qualified`) | percent | 25.0 | 25.0 | 25.0 | higher is better | monthly | Demand Generation Lead |
+| lead_response_hours | Inbound lead first-touch time (business hours, `external.lead_inbound` to `marketing.lead_generated`) | hours (p90) | 8 | 6 | 4 | lower is better | weekly | Demand Generation Lead |
 | cost_per_lead | Marketing cost per lead | GBP | 1,297 | 1,542 | 1,985 | lower is better | monthly | Chief Marketing Officer |
 | cost_per_qualified_lead | Marketing cost per sales-qualified lead | GBP | 5,188 | 6,167 | 7,937 | lower is better | monthly | Chief Marketing Officer |
 | marketing_cost_per_new_logo | Marketing cost per new logo | GBP | 34,583 | 41,111 | 52,941 | lower is better | quarterly | Chief Marketing Officer |
-| inbound_lead_share | Inbound share of leads (content, search, referral, events vs outbound) | percent | 45.0 | 50.0 | 55.0 | higher is better | monthly | Demand Generation Manager |
+| inbound_lead_share | Inbound share of leads (content, search, referral, events vs outbound) | percent | 45.0 | 50.0 | 55.0 | higher is better | monthly | Demand Generation Lead |
 | us_lead_share | US share of leads generated | percent | 0.0 | 15.0 | 30.0 | target (track to plan) | quarterly | Chief Marketing Officer |
-| content_assets_published | Long-form assets published (`marketing.content_published`) | count / year | 48 | 120 | 260 | higher is better | monthly | Content and Events Lead |
-| content_qa_first_pass_rate | Agent-drafted content passing human QA first time | percent | 90.0 | 93.0 | 95.0 | higher is better | monthly | Content and Events Lead |
-| events_run | Events and webinars scheduled and run (`marketing.event_scheduled`) | count / year | 6 | 14 | 26 | higher is better | quarterly | Content and Events Lead |
-| case_studies_published | Approved client case studies published | count / year | 4 | 10 | 18 | higher is better | quarterly | Content and Events Lead |
-| lost_deal_reactivation_rate | Lost deals (`sales.deal_lost`) re-engaged into nurture who return to qualified | percent | 8.0 | 10.0 | 12.0 | higher is better | quarterly | Demand Generation Manager |
+| content_assets_published | Long-form assets published (`marketing.content_published`) | count / year | 48 | 120 | 260 | higher is better | monthly | Content Marketing Specialist |
+| content_qa_first_pass_rate | Agent-drafted content passing human QA first time | percent | 90.0 | 93.0 | 95.0 | higher is better | monthly | Content Marketing Specialist |
+| events_run | Events and webinars scheduled and run (`marketing.event_scheduled`) | count / year | 6 | 14 | 26 | higher is better | quarterly | Content Marketing Specialist |
+| case_studies_published | Approved client case studies published | count / year | 4 | 10 | 18 | higher is better | quarterly | Content Marketing Specialist |
+| lost_deal_reactivation_rate | Lost deals (`sales.deal_lost`) re-engaged into nurture who return to qualified | percent | 8.0 | 10.0 | 12.0 | higher is better | quarterly | Demand Generation Lead |
 | brand_incident_first_response_hours | Brand incident first response time (`marketing.brand_incident_raised`) | hours (p90) | 4 | 4 | 2 | lower is better | per incident, reviewed monthly | Chief Marketing Officer |
 | budget_variance_pct | Marketing spend variance to approved budget (absolute) | percent | 5.0 | 5.0 | 5.0 | lower is better (ceiling) | monthly | Chief Marketing Officer |
 
@@ -48,7 +48,7 @@ Fiscal year is the calendar year; Year 1 = FY2026 (COMPANY.md §1). Counts are f
 
 | Cadence | Forum | Content | Data source |
 |---|---|---|---|
-| Weekly | Marketing stand-up (CMO, Demand Generation Manager, Content and Events Lead) | leads_generated, lead_response_hours, content pipeline | CRM lead records, marketing-automation platform, agent activity log |
+| Weekly | Marketing stand-up (CMO, Demand Generation Lead, Content Marketing Specialist) | leads_generated, lead_response_hours, content pipeline | CRM lead records, marketing-automation platform, agent activity log |
 | Monthly | Marketing performance review, shared with the CRO | All monthly KPIs, spend vs budget, channel cost per lead | CRM, web analytics, finance month-end close (`finance.month_end_closed`), ad platforms |
 | Quarterly | Business review with Sales, Data and Finance; input to the Board pack | Cost per new logo, cohort lead-to-qualified, events, case studies, reactivation, US share | Data department KPI report (`data.kpi_report_published`), Sales pipeline, `data.benchmark_ready` |
 | Annually | Budget cycle (opens Q4, `finance.budget_cycle_opened`) | Target reset and `marketing.budget_submitted` | `economics.md`, prior-year actuals, OKRs (`executive.okrs_set`) |
@@ -75,5 +75,5 @@ Headcount context: 3 humans in FY2026 (CMO plus two specialists) and 3 agents, g
 ## 5. Targets reset rules
 
 - Targets are reset only through the annual budget cycle or an `executive.strategy_updated` / `executive.okrs_set` change; in-year changes need CMO and CRO agreement and are recorded in the quarterly review.
-- If `lead_to_qualified_rate` falls below 20% for two consecutive months, the Demand Generation Manager and a Sales lead jointly review lead definitions and ideal-client criteria (COMPANY.md §2) within 10 business days.
+- If `lead_to_qualified_rate` falls below 20% for two consecutive months, the Demand Generation Lead and a Sales lead jointly review lead definitions and ideal-client criteria (COMPANY.md §2) within 10 business days.
 - If `cost_per_qualified_lead` exceeds target by more than 20% for a quarter, the lowest-performing channel loses programme spend in the next quarter.

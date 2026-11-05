@@ -207,7 +207,7 @@ class MarketingAgent(DepartmentAgent):
         """Plan and schedule publication of a content asset; emits marketing.content_published."""
         asset_id = f"CNT-{self.state['content_published'] + 1:04d}"
         task = self.create_task(f"Produce {kind}: {title}", due_in_days=max(delay_days - 1, 1), priority="medium")
-        body = {"asset_id": asset_id, "content_type": kind, "title": title, "trigger": trigger,
+        body = {"content_id": asset_id, "asset_id": asset_id, "format": kind, "content_type": kind, "title": title, "trigger": trigger,
                 "task_id": task.id, "summary": f"{kind}: {title}"}
         body.update(extra)
         self.state["content_published"] += 1
@@ -479,7 +479,8 @@ class MarketingAgent(DepartmentAgent):
         leads = LEAD_TARGETS.get(fy, LEAD_TARGETS[2028])
         programme = envelope["non_people"]
         out = self.emit("marketing.budget_submitted", {
-            "department": "marketing", "fiscal_year": fy,
+            "department": "marketing", "fiscal_year": fy, "budget_cycle": f"BUD-{fy}",
+            "people_gbp": envelope["people"] * 1000, "non_people_gbp": programme * 1000,
             "people_gbpk": envelope["people"], "non_people_gbpk": programme, "total_gbpk": envelope["total"],
             "amount_gbp": envelope["total"] * 1000,
             "lead_target": leads,

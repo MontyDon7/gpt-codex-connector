@@ -36,33 +36,27 @@ Programme build behind the larger lines (units x unit cost):
 
 ## 2. Headcount cost build-up
 
-Loaded cost = base salary x 1.28 (COMPANY.md §5.2). Cost = average FTE in year x loaded cost. Bases sit inside the §6.2 bands and are held constant across years (no merit uplift modelled; see section 4). The US Marketing Manager is a NYC hire at the London band midpoint plus 15% (COMPANY.md §6.2 note), base £110,400.
+Loaded cost = base salary x 1.28 (COMPANY.md §5.2). Cost = average FTE in year x loaded cost. Roles, planned bases and start quarters are those of `blueprint.md` sections 3 and 5; the Base column shows the first-year base and the FY2027 and FY2028 cost columns use the blueprint's planned base for that year (small in-year uplifts, and part-year FY2028 hires counted at their own base). Avg FTE counts a hire from the first day of its start quarter. No US-based hire is planned in this department before FY2028, so no +15% uplift is applied.
 
 | Role | Level | Base (£) | Loaded (£k) | Avg FTE FY26 | Cost FY26 (£k) | Avg FTE FY27 | Cost FY27 (£k) | Avg FTE FY28 | Cost FY28 (£k) |
 |---|---|---|---|---|---|---|---|---|---|
-| Chief Marketing Officer (head) | head | 155,000 | 198.4 | 1.00 | 198.4 | 1.00 | 198.4 | 1.00 | 198.4 |
-| Demand Generation Manager | manager | 100,000 | 128.0 | 0.40 | 51.2 | 1.00 | 128.0 | 1.00 | 128.0 |
-| Content and Thought Leadership Specialist | consultant | 58,000 | 74.2 | 0.40 | 29.7 | 1.00 | 74.2 | 1.00 | 74.2 |
-| Content and Thought Leadership Lead | manager | 92,000 | 117.8 | 0 | 0.0 | 0.50 | 58.9 | 1.00 | 117.8 |
-| Events and Field Marketing Specialist | senior_consultant | 74,000 | 94.7 | 0 | 0.0 | 0.50 | 47.4 | 1.00 | 94.7 |
-| Marketing Operations Specialist | consultant | 58,000 | 74.2 | 0 | 0.0 | 0.35 | 26.0 | 1.00 | 74.2 |
-| Brand and Design Associate | analyst | 42,000 | 53.8 | 0 | 0.0 | 0.20 | 10.8 | 1.00 | 53.8 |
-| Marketing Manager, US (NYC) | manager | 110,400 | 141.3 | 0 | 0.0 | 0.40 | 56.5 | 1.00 | 141.3 |
-| Senior ABM and Demand Specialist | senior_consultant | 72,000 | 92.2 | 0 | 0.0 | 0 | 0.0 | 0.45 | 41.5 |
-| Content Specialist (2) | consultant | 56,000 | 71.7 | 0 | 0.0 | 0 | 0.0 | 0.30 | 21.5 |
-| Events Specialist (2) | consultant | 56,000 | 71.7 | 0 | 0.0 | 0 | 0.0 | 0.25 | 17.9 |
-| Marketing Analyst | analyst | 40,000 | 51.2 | 0 | 0.0 | 0 | 0.0 | 0.30 | 15.4 |
-| Partner Marketing Specialist | consultant | 56,000 | 71.7 | 0 | 0.0 | 0 | 0.0 | 0.15 | 10.8 |
-| Marketing Operations Specialist (2) | consultant | 56,000 | 71.7 | 0 | 0.0 | 0 | 0.0 | 0.10 | 7.2 |
-| **Build-up total** | | | | **1.80** | **279.3** | **4.95** | **600.1** | **9.55** | **996.6** |
-| Pay-review and true-up reserve | | | | | 0.7 | | -0.1 | | 3.4 |
+| Chief Marketing Officer | head | 145,000 | 185.6 | 1 | 185.6 | 1 | 189.4 | 1 | 192.0 |
+| Demand Generation Lead | manager | 94,000 | 120.3 | 0 | 0.0 | 0.75 | 90.2 | 1 | 121.6 |
+| Demand Generation Specialist | consultant | 60,000 | 76.8 | 0 | 0.0 | 0.5 | 38.4 | 1.5 | 116.5 |
+| Senior Product Marketing Specialist | senior_consultant | 80,000 | 102.4 | 0 | 0.0 | 0.75 | 76.8 | 1.75 | 181.1 |
+| Marketing Operations Specialist | consultant | 62,000 | 79.4 | 0.75 | 59.5 | 1 | 80.6 | 1.5 | 124.2 |
+| Content Marketing Specialist | consultant | 58,000 | 74.2 | 0.5 | 37.1 | 1 | 75.5 | 1.25 | 95.4 |
+| Events Specialist | consultant | 60,000 | 76.8 | 0 | 0.0 | 0.5 | 38.4 | 1.25 | 96.6 |
+| Marketing Analyst | analyst | 44,000 | 56.3 | 0 | 0.0 | 0.25 | 14.1 | 1.25 | 72.3 |
+| **Build-up total** | | | | **2.25** | **282.2** | **5.75** | **603.5** | **10.5** | **999.7** |
+| Pay-review and true-up reserve | | | | | -2.2 | | -3.5 | | 0.3 |
 | **People total (envelope)** | | | | | **280** | | **600** | | **1,000** |
 
-Year-end headcount reconciles to COMPANY.md §6.1: FY2026 3 humans (CMO, Demand Generation Manager, Content Specialist); FY2027 8 humans (adds Content Lead, Events Specialist, Marketing Operations Specialist, Brand Associate, US Marketing Manager); FY2028 14 humans (adds Senior ABM and Demand Specialist, Content Specialist 2, Events Specialist 2, Marketing Analyst, Partner Marketing Specialist, Marketing Operations Specialist 2). Average FTE (1.8 / 4.95 / 9.55) is below year-end headcount because FY2026 hires land in the second half and FY2028 hires cluster in the second half; marketing hires lag the lead target by roughly one quarter because programme spend is funded first.
+Year-end headcount reconciles to COMPANY.md §6.1 and to `blueprint.md` section 3: FY2026 3 humans (Chief Marketing Officer, Marketing Operations Specialist, Content Marketing Specialist); FY2027 8 humans (adds Demand Generation Lead, Senior Product Marketing Specialist, Demand Generation Specialist, Events Specialist, Marketing Analyst); FY2028 14 humans (adds one more each of Demand Generation Specialist, Senior Product Marketing Specialist, Marketing Operations Specialist, Content Marketing Specialist, Events Specialist and Marketing Analyst). Average FTE (2.25 / 5.75 / 10.5) is below year-end headcount because hires start part-way through each year; marketing hires lag the lead target by roughly one quarter because programme spend is funded first.
 
 AI agents (COMPANY.md §6.1: 3 / 8 / 16) are not in the people line. Their direct inference and tool-seat cost sits in the "AI compute and agent tooling" line: £20k / £60k / £130k, i.e. about £6.7k / £7.5k / £8.1k per agent-year. Each agent has a named human owner (COMPANY.md §9.4): campaign drafting, content repurposing, SEO and competitor monitoring, lead enrichment and scoring, event follow-up, reporting.
 
-Blended loaded cost per average human FTE: £155k (FY2026, head-weighted), £121k (FY2027), £104k (FY2028).
+Blended loaded cost per average human FTE: £125k (FY2026, head-weighted), £105k (FY2027), £95k (FY2028).
 
 ## 3. Pricing and unit economics
 
@@ -132,7 +126,7 @@ Targets for the department: LTV to blended CAC at or above 3x in every year (com
 | NYC executive breakfast | £17k | USD-denominated at £1 = $1.27 |
 | Insight article or newsletter issue | £0.6k to £0.7k | Agent-drafted, human-edited; human-only baseline about £1.1k |
 
-Agent leverage in content: an agent-assisted insight article costs about £0.65k against about £1.1k human-only (assumption: a Content Specialist day at loaded cost of about £340 plus roughly £350 of agent-day cost per COMPANY.md §3.5, versus 3 human days). This is the saving behind the plan to hold content people cost flat in FY2028 while output roughly doubles.
+Agent leverage in content: an agent-assisted insight article costs about £0.65k against about £1.1k human-only (assumption: a Content Marketing Specialist day at loaded cost of about £340 plus roughly £350 of agent-day cost per COMPANY.md §3.5, versus 3 human days). This is the saving behind the plan to hold content people cost flat in FY2028 while output roughly doubles.
 
 ### 3.5 Phasing (FY2026 non-people spend, £550k)
 
@@ -174,7 +168,7 @@ Non-budgeted spend above £50k needs CFO approval and above £250k CEO approval 
 | Event cancellations (venue or speaker failure) | Exposure £96k (30% of £320k non-refundable) | Cancellation clauses; contingency reallocation to roundtables |
 | Marketing-sourced share 50% instead of 60% | Marketing cost per marketing-sourced logo +20%; Sales must source more | Joint pipeline review with the CRO |
 | Marketing-sourced deals skew to Spark and Pilot (average first-year value 30% below ACV) | Revenue per £1 of spend falls 4.4x to 3.1x; gross-margin return 2.5x to 1.8x | Nurture to Build and Keep; measure on Keep attach |
-| Hiring delayed one quarter (Content Lead, Events and Marketing Operations specialists) | People saving about £72k; content and event capacity falls 15% to 20% | Use freelancers from the content line; no net saving after cover |
+| Hiring delayed one quarter (Demand Generation Specialist, Events Specialist and Marketing Analyst) | People saving about £72k; content and event capacity falls 15% to 20% | Use freelancers from the content line; no net saving after cover |
 | USD strengthens 5% | FY2027 US spend about £120k: +£6k; FY2028 US spend about £470k: +£23.5k | Quote US vendors in USD with a fixed rate where possible |
 | AI unit costs fall 15% as planned | FY2027 AI line £60k becomes about £51k at constant usage | Reinvest in more agent seats |
 | FY2028 spend outpaces revenue | Marketing is 9.7% of revenue in FY2028 (£4.5m / £46.2m), 9.5% in FY2027 and 13.8% in FY2026 | Stage-gate the FY2028 paid and US lines on the FY2027 CAC |
