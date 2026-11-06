@@ -484,6 +484,7 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 ### Steps
 
 1. [agent] On `people.requisition_opened`, check the role against the approved plan: department, level, band, quarter, and remaining headcount budget; compute loaded cost = base x 1.28 (employer NI, pension, benefits and bonus accrual) and the in-year cost based on start date.
+   Committed headcount is hired staff plus open requisitions for the department. When it exceeds the approved year-end plan (§6.1), the agent flags it once per department and year as `finance.budget_variance_flagged` (category `people`); it does not publish `finance.hire_requested` in answer to a requisition.
 2. [human] Finance Manager confirms the requisition is within budget or marks it as non-budgeted; non-budgeted requisitions wait for `executive.headcount_approved` (COMPANY.md §9.3).
 3. [agent] On `executive.headcount_approved`, add the approved role to the establishment, update the department forecast and cost centre, and tell the cash forecast (SOP-FINANCE-11).
 4. [agent] On `people.offer_accepted`, validate the salary against band and budget (flag any offer above the band maximum or more than 5% above the approved cost); create the payroll draft with the start date. US hires carry a +15% salary uplift (COMPANY.md §6.2).
@@ -497,8 +498,8 @@ Topic coverage (checked at the end of this document): every subscribed topic is 
 ### Outputs and messages
 
 - `finance.cash_forecast_updated` to `executive`, `data`: refreshed payroll and subcontractor lines after an approved hire, leaver or contractor, with `horizon_weeks`, `closing_cash_gbp`, `min_cash_gbp`, `summary`; emitted if the change exceeds £10,000 a month.
-- `finance.hire_requested` to `people`: finance's budget-check response to `people.requisition_opened` with `requisition_id`, `department`, `role`, `salary_gbp`, `annual_loaded_cost_gbp`, `within_budget` (bool), `year_end_headcount_plan`, `requested_by`.
-- `finance.budget_variance_flagged` to `executive`: when a requisition or offer breaches the approved people budget; `department`, `period`, `variance_gbp`, `variance_pct`, `severity`, `summary`.
+- `finance.hire_requested` to `people`: finance's own capacity-triggered requisition for a seat in the finance department (`department`, `role`, `level`, `justification`, `start_quarter`). It is never a reply to another department's requisition: People treats every `hire_requested` as a new requisition, so a reply would open another requisition, which Finance would check again (a loop that produced about 1,000 requisitions in two simulated years).
+- `finance.budget_variance_flagged` to `executive`: when a requisition (committed headcount above the year-end plan, once per department and year) or an offer breaches the approved people budget; `department`, `period`, `variance_gbp`, `variance_pct`, `severity`, `summary`.
 
 ### SLA and controls
 

@@ -123,7 +123,7 @@ class FinanceAgent(DepartmentAgent):
             "collected_gross_ytd": 0.0, "bad_debt_gbp": 0.0, "credit_notes": 0, "invoices_raised": 0,
             "on_time_invoices": 0, "pricing_checks": 0, "pricing_on_time": 0, "pricing_days_total": 0.0, "margin_sum": 0.0,
             "days_to_pay": [], "periods": {}, "close_queue": [], "cur_month": None, "closes": 0,
-            "budget_cycles": {}, "approved_budget": {}, "commitments": {}, "flagged": {}, "headcount": {},
+            "budget_cycles": {}, "approved_budget": {}, "commitments": {}, "flagged": {}, "headcount": {}, "open_requisitions": {},
             "contractors": {}, "vendors": {}, "forecast_errors": [], "crisis_mode": False, "series_a_booked": False,
             "last_cash_day": -1, "hire_requested": False, "unapplied_cash_gbp": 0.0, "renewals": {},
             "capacity": {}, "okrs": {}, "board_packs": 0, "cash_gbp": None, "handled": 0, "unmapped": 0,
@@ -864,22 +864,45 @@ class FinanceAgent(DepartmentAgent):
         return []
 
     def _on_requisition_opened(self, msg: Message, body: dict) -> list[Message]:
+        """Finance budget check on a People requisition. This must NOT emit finance.hire_requested: People would
+        treat it as a new hire request and open another requisition, which Finance would check again (a loop that
+        produced ~1,000 requisitions in two simulated years). An over-plan requisition is flagged as a budget
+        variance instead; the approval decision itself belongs to Executive."""
         dept = _s(_first(body, "department", "dept"), "unknown")
         req = _s(body.get("requisition_id"), msg.id)
         self._task(f"Confirm requisition {req} ({dept}) is within approved headcount budget", self.clock.day + 3)
-        # Finance budget check: respond to People with the hire request carrying the loaded-cost confirmation.
         salary = _num(_first(body, "salary_gbp", "base_salary_gbp", "salary"))
         plan = HEADCOUNT_PLAN.get(dept)
         planned = plan[self._fy() - 1] if plan else None
-        within = planned is None or self.state["headcount"].get(dept, 0) < planned
-        return [self.emit("finance.hire_requested", {
-            "department": dept, "requisition_id": req, "role": _s(body.get("role"), "unspecified"),
-            "salary_gbp": salary, "annual_loaded_cost_gbp": round(salary * LOADED_COST_FACTOR, 2),
-            "within_budget": within, "year_end_headcount_plan": planned, "requested_by": "finance",
-            "justification": "finance budget check on opened requisition"}, recipient="people", reply_to=msg.id)]
+        in_flight = self.state["open_requisitions"].setdefault(dept, [])
+        if req not in in_flight:
+            in_flight.append(req)
+        committed = self.state["headcount"].get(dept, 0) + len(in_flight)
+        if planned is None or committed <= planned:
+            return []
+        key = f"req:{dept}:{self._fy()}"
+        if self.state["flagged"].get(key):
+            return []
+        self.state["flagged"][key] = "over"
+        return [self.emit("finance.budget_variance_flagged", {
+            "department": dept, "category": "people", "requisition_id": req,
+            "role": _s(body.get("role"), "unspecified"), "year_end_plan": planned,
+            "committed_headcount": committed,
+            "annual_loaded_cost_gbp": round(salary * LOADED_COST_FACTOR, 2), "severity": "over_budget",
+            "trigger": "requisition would take committed headcount beyond the approved year-end plan"},
+            reply_to=msg.id)]
+
+    def _release_requisition(self, dept: str, req: str) -> None:
+        in_flight = self.state["open_requisitions"].get(dept, [])
+        if req and req in in_flight:
+            in_flight.remove(req)
+        elif in_flight and not req:
+            in_flight.pop(0)
 
     def _on_headcount_approved(self, msg: Message, body: dict) -> list[Message]:
         dept = _s(_first(body, "department", "dept"), "unknown")
+        if body.get("approved") is False or _s(body.get("decision")).lower() in ("declined", "rejected", "denied"):
+            self._release_requisition(dept, _s(body.get("requisition_id")))
         self._task(f"Add approved headcount for {dept} to payroll forecast and variance baseline",
                    self.clock.day + 5, "medium")
         return []
@@ -891,6 +914,7 @@ class FinanceAgent(DepartmentAgent):
         out: list[Message] = []
         hc = self.state["headcount"]
         hc[dept] = hc.get(dept, 0) + 1
+        self._release_requisition(dept, _s(body.get("requisition_id")))
         plan = HEADCOUNT_PLAN.get(dept)
         if plan and hc[dept] > plan[self._fy() - 1] and self.state["flagged"].get(f"hc:{dept}") != "over":
             self.state["flagged"][f"hc:{dept}"] = "over"

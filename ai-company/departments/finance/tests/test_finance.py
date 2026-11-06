@@ -9,6 +9,7 @@ import unittest
 from core import (Company, DepartmentAgent, Kpi, Message, MessageBus, MockLLM, SimClock, class_name_for,
                   publishes_for, subscribes_for)
 from core.events import EventLog
+from departments.finance import agent as agent_module
 from departments.finance import workflows
 from departments.finance.agent import KPIS, FinanceAgent, build_agent
 
@@ -309,12 +310,28 @@ class BehaviourTests(unittest.TestCase):
         self.assertTrue(topics, "finance should emit something while running a budget cycle")
         self.assertIn("finance.budget_consolidated", topics)
 
-    def test_hire_request_from_people_flow(self) -> None:
+    def test_requisition_budget_check_never_emits_hire_requested(self) -> None:
+        """Regression: replying to people.requisition_opened with finance.hire_requested made People open another
+        requisition for every check (about 1,000 requisitions in two simulated years)."""
         body = {"requisition_id": "REQ-0001", "department": "delivery", "role": "Consultant",
                 "salary_gbp": 62000}
         company, _ = self._run("people.requisition_opened", body, sender="people")
         self.assertGreater(len(company.log.query(department=DEPT)), 0)
-        self.assertIn("finance.hire_requested", self._emitted_topics(company))
+        self.assertNotIn("finance.hire_requested", self._emitted_topics(company))
+        self.assertNotIn("finance.budget_variance_flagged", self._emitted_topics(company))   # within plan
+
+    def test_over_plan_requisition_is_flagged_once_as_a_budget_variance(self) -> None:
+        plan = agent_module.HEADCOUNT_PLAN["delivery"][0]
+        company, agent = make_env()
+        for i in range(plan + 3):
+            company.inject("people.requisition_opened", {"requisition_id": f"REQ-{i:04d}", "department": "delivery",
+                                                         "role": "Consultant", "salary_gbp": 62000}, recipient=DEPT, sender="people")
+        company.run(10)
+        flags = [m for m in company.bus.history if m.topic == "finance.budget_variance_flagged"
+                 and m.body.get("category") == "people"]
+        self.assertEqual(len(flags), 1, "flagged once per department and year, not once per requisition")
+        self.assertEqual(flags[0].body["year_end_plan"], plan)
+        self.assertNotIn("finance.hire_requested", self._emitted_topics(company))
 
     def test_all_emitted_topics_are_published_topics(self) -> None:
         for name, fn in workflows.SCENARIOS.items():

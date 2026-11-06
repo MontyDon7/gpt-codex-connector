@@ -41,6 +41,16 @@ class QuietYearTests(unittest.TestCase):
         self.assertLess(len(log), 8000)
         self.assertLess(len(co.bus.history), 2500)
 
+    def test_hiring_traffic_is_not_amplified(self) -> None:
+        """Regression: Finance answered each requisition with a hire_requested that People turned into another
+        requisition, producing ~1,000 requisitions from ~60 hire requests in two years."""
+        co = make_company()
+        co.run(730)
+        requests = sum(1 for m in co.bus.history if m.topic.endswith(".hire_requested"))
+        requisitions = sum(1 for m in co.bus.history if m.topic == "people.requisition_opened")
+        self.assertGreater(requests, 0)
+        self.assertLessEqual(requisitions, requests, "every requisition must trace back to a hire request")
+
     def test_every_department_is_alive(self) -> None:
         co = make_company()
         log = co.run(120)
