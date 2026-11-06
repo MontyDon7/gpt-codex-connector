@@ -27,7 +27,7 @@ KPIS: list[Kpi] = [
     Kpi("csat", "percent", 90.0, None),
     Kpi("avg_health_score", "points", 72.0, None),
     Kpi("green_client_share", "percent", 60.0, None),
-    Kpi("keep_attach_forge_build_scale", "percent", 75.0, None),     # realised rate; COMPANY.md §2 policy is 100%
+    Kpi("keep_attach_forge_build_scale", "percent", 100.0, None),    # COMPANY.md §2: Keep attaches to every Build/Scale
     Kpi("keep_attach_compass_programme", "percent", 40.0, None),     # COMPANY.md §2 minimum (>=40%)
     Kpi("support_first_response_sla", "percent", 95.0, None),
     Kpi("at_risk_save_rate", "percent", 40.0, None),
@@ -54,11 +54,13 @@ PRICES_GBP: dict[str, int] = {
 KEEP_ATTACH: dict[str, str] = {
     "forge_build": "keep_plus", "forge_scale": "keep_enterprise", "compass_programme": "keep_essential",
 }
-# Policy floor, percent of completed engagements that must receive a Keep proposal at closeout (offer rate).
-# The KPIs keep_attach_* measure the realised signed rate, a ramp (75 / 85 / 90 for Build and Scale) towards the
-# 100% policy because a client may decline (sops.md, SOP-CUSTOMER_SUCCESS-08).
+# Policy target, percent of completed engagements with a signed Keep contract within the window (kpis.md). The
+# targets equal COMPANY.md §2 in every year: 100% of Forge Build and Scale, at least 40% of Compass Programmes. A
+# Build or Scale client that has not signed by ATTACH_REOFFER_DAYS is re-offered a reduced scope; one that has not
+# signed when the window closes is a policy exception escalated to the CEO (SOP-CUSTOMER_SUCCESS-08).
 KEEP_ATTACH_POLICY_PCT: dict[str, float] = {"forge_build": 100.0, "forge_scale": 100.0, "compass_programme": 40.0}
 ATTACH_WINDOW_DAYS = 365          # signed Keep contract within 12 months of completion counts as attached
+ATTACH_REOFFER_DAYS = 90          # unattached Keep offer is re-offered at reduced scope after 90 days
 # COMPANY.md §10 journey: Spark -> Pilot -> Build -> Keep Plus
 UPSELL_PATH: dict[str, str] = {
     "compass_spark": "forge_pilot", "compass_sprint": "forge_pilot", "forge_pilot": "forge_build",
@@ -77,11 +79,23 @@ SIGNAL_MIN_COUNT = 2              # distinct negative signals inside the window 
 ENTERPRISE_NPS_FLAG_MAX = 3       # NPS 0 to 3 from a Keep Enterprise sponsor flags churn risk
 CANCEL_KEYWORDS = ("cancel", "terminate", "not renew", "switch provider", "leave you", "end the contract")
 SLA_BREACH_SUPPORT_HIT = 10.0     # support component reduction for each recorded SLA breach
-TICKETS_MONTH_FIRST_SPECIALIST = 30
-LIVE_KEEP_FIRST_SPECIALIST = 8
-TICKETS_MONTH_THIRD_SPECIALIST = 150
+# Support desk load model (sops.md, Keep support SLAs): the simulated first-response and resolution time of a ticket is
+# its SLA target x (TICKET_LOAD_BASE + TICKET_LOAD_PER_OPEN x tickets already open on the desk). A ticket that
+# carries measured `first_response_hours` / `resolution_hours` uses those instead.
+TICKET_LOAD_BASE = 0.5
+TICKET_LOAD_PER_OPEN = 0.25
+P4_OPEN_DAYS = 5                  # a P4 ticket has no resolution target; it counts as open this many days
+# Hiring triggers (blueprint.md section 5, sops.md SOP-CUSTOMER_SUCCESS-14), evaluated monthly unless stated
+TICKETS_MONTH_FIRST_SPECIALIST = 30    # more than 30 tickets in a month: first Client Support Specialist
+LIVE_KEEP_FIRST_SPECIALIST = 8         # more than 8 live Keep clients: first Client Support Specialist
+TICKETS_MONTH_THIRD_SPECIALIST = 150   # more than 150 tickets in a month: third Client Support Specialist
 SLA_HIRE_FLOOR_PCT = 95.0         # first-response SLA below this for two months raises a specialist request
-RENEWALS_FOR_MANAGER = 30         # Keep renewals in the next 12 months
+SLA_HIRE_MONTHS = 2
+RENEWALS_FOR_MANAGER = 30         # more than 30 Keep renewals in the next 12 months: Renewals and Commercial Manager
+TIME_TO_HIRE_DAYS = 45            # COMPANY.md §8: the seat starts this many days after the request
+ROLE_CSM = "Customer Success Manager"
+ROLE_SPECIALIST = "Client Support Specialist"
+ROLE_RENEWALS = "Renewals and Commercial Manager"
 
 # COMPANY.md §5.4 department envelopes, GBP (people, non_people) by fiscal year
 BUDGET_GBP: dict[int, tuple[int, int]] = {
@@ -92,12 +106,11 @@ HEADCOUNT: dict[int, tuple[int, int]] = {2026: (1, 1), 2027: (6, 5), 2028: (14, 
 # Planned year-end humans by hireable role (blueprint.md section 3; the CCO is the first named client manager and is
 # not in this table). A request that takes a role above its plan is outside the approved headcount plan.
 ROLE_PLAN: dict[str, dict[int, int]] = {
-    "Customer Success Manager": {2026: 0, 2027: 2, 2028: 6},
-    "Client Support Specialist": {2026: 0, 2027: 2, 2028: 3},
-    "Renewals and Commercial Manager": {2026: 0, 2027: 0, 2028: 1},
+    ROLE_CSM: {2026: 0, 2027: 2, 2028: 6},
+    ROLE_SPECIALIST: {2026: 0, 2027: 2, 2028: 3},
+    ROLE_RENEWALS: {2026: 0, 2027: 0, 2028: 1},
 }
-ROLE_LEVEL: dict[str, str] = {"Customer Success Manager": "manager", "Client Support Specialist": "consultant",
-                              "Renewals and Commercial Manager": "manager"}
+ROLE_LEVEL: dict[str, str] = {ROLE_CSM: "manager", ROLE_SPECIALIST: "consultant", ROLE_RENEWALS: "manager"}
 
 # ---------------------------------------------------------------------------------------------
 # Health score model (SOP-CUSTOMER_SUCCESS-02)
@@ -179,8 +192,6 @@ class CustomerSuccessAgent(DepartmentAgent):
             "executive.okrs_set": self._on_okrs_set,
             "executive.strategy_updated": self._on_strategy_updated,
             "executive.crisis_declared": self._on_crisis,
-            "customer_success.internal.renewal_decision": self._on_renewal_decision,
-            "customer_success.internal.save_deadline": self._on_save_deadline,
         }
 
     # contract -----------------------------------------------------------------------------
@@ -193,8 +204,9 @@ class CustomerSuccessAgent(DepartmentAgent):
         return list(out)
 
     def tick(self) -> list[Message]:
-        """Daily renewal scan, weekly health refresh and capacity check, quarterly QBR tasks."""
-        out: list[Message] = []
+        """Queued decisions, daily renewal scan, weekly health refresh and capacity check, monthly hiring review,
+        quarterly QBR tasks."""
+        out: list[Message] = self._run_scheduled()
         day = self.clock.day
         for cid in sorted(self.clients):
             c = self.clients[cid]
@@ -213,11 +225,35 @@ class CustomerSuccessAgent(DepartmentAgent):
                     "due_day": keep["term_end_day"], "health_score": c["health"], "band": c["band"],
                     "summary": f"Keep renewal for {c['client_name']} due in {keep['term_end_day'] - day} days",
                 }))
+        self._handover_watch()
+        self._attach_watch()
         if self.clock.every(7):
             out.extend(self._weekly_review())
-        if self.clock.is_month_start and self.clock.date.month in (1, 4, 7, 10):
-            self._schedule_qbrs()
+        if self.clock.is_month_start:
+            out.extend(self._monthly_hiring_review())
+            if self.clock.date.month in (1, 4, 7, 10):
+                self._schedule_qbrs()
         return out
+
+    # deterministic queue of human decisions modelled by the agent (no private topics) ------------
+    def _schedule(self, kind: str, delay_days: int, payload: dict) -> None:
+        """Queue a decision for a later tick. A newer item of the same kind for the same client replaces the old."""
+        queue = self.state.setdefault("scheduled", [])
+        queue[:] = [i for i in queue if not (i["kind"] == kind and i["payload"].get("client_id") ==
+                                             payload.get("client_id"))]
+        queue.append({"seq": self._counter("sched"), "due_day": self.clock.day + delay_days, "kind": kind,
+                      "payload": payload})
+
+    def _run_scheduled(self) -> list[Message]:
+        handlers = {"renewal_decision": self._on_renewal_decision, "save_deadline": self._on_save_deadline}
+        out: list[Message] = []
+        queue = self.state.setdefault("scheduled", [])
+        while True:
+            due = sorted((i for i in queue if i["due_day"] <= self.clock.day), key=lambda i: (i["due_day"], i["seq"]))
+            if not due:
+                return out
+            queue.remove(due[0])
+            out.extend(handlers[due[0]["kind"]](due[0]["payload"]))
 
     # core health model --------------------------------------------------------------------
     @staticmethod
@@ -358,6 +394,9 @@ class CustomerSuccessAgent(DepartmentAgent):
         c["service_line"] = b.get("service_line", c["service_line"])
         c["tier"] = b.get("tier", c["tier"])
         out: list[Message] = []
+        # onboarding clock (kpis.md onboarding_handover_days): starts at signature unless the contract is migrated
+        if int(b.get("start_day", self.clock.day)) >= self.clock.day - MIGRATED_CONTRACT_DAYS:
+            c["contract_signed_day"], c["handover_pending"], c["handover_flagged"] = self.clock.day, True, False
         if c["service_line"] == "keep" or str(c["tier"] or "").startswith("keep_"):
             tier = c["tier"] if c["tier"] in KEEP_TIERS else "keep_essential"
             start = int(b.get("start_day", self.clock.day))
@@ -368,6 +407,10 @@ class CustomerSuccessAgent(DepartmentAgent):
                          "term_end_day": start + round(term_months * 365 / 12), "renewal_notified": False,
                          "renewal_proposed": False}
             c["status"] = "active"
+            for entry in self.state.setdefault("attach_ledger", {}).values():
+                if (entry["client_id"] == c["client_id"] and not entry["attached"]
+                        and self.clock.day - entry["completed_day"] <= ATTACH_WINDOW_DAYS):
+                    entry["attached"], entry["attached_day"] = True, self.clock.day
             self.create_task(f"Keep onboarding: monitoring, SLA and QBR calendar for {c['client_name']}", 5, "high")
             out.extend(self._rescore(c, "Keep contract signed", force=False))
         else:
@@ -397,6 +440,7 @@ class CustomerSuccessAgent(DepartmentAgent):
         self._touch(c)
         self._adjust(c, engagement=+5.0)
         self.create_task(f"Handover pack and sponsor check-in for {c['client_name']} kickoff", 5, "medium")
+        self._complete_handover(c)
         self.log_event("customer_success.activity.kickoff_handover", c["client_name"], client_id=c["client_id"],
                        engagement_id=m.body.get("engagement_id"))
         return self._rescore(c, "engagement kicked off")
@@ -419,6 +463,12 @@ class CustomerSuccessAgent(DepartmentAgent):
         tier = b.get("tier") or c["tier"]
         c["status"] = "active"
         c["engagement_completed"] = True
+        if tier in KEEP_ATTACH:
+            ledger_key = b.get("engagement_id") or f"{c['client_id']}:{tier}"
+            self.state.setdefault("attach_ledger", {}).setdefault(ledger_key, {
+                "client_id": c["client_id"], "tier": tier, "completed_day": self.clock.day,
+                "attached": c["keep"] is not None, "attached_day": self.clock.day if c["keep"] else None,
+                "reoffered": False, "lapsed": False})
         self._touch(c)
         self._adjust(c, delivery=+10.0)
         self.create_task(f"Closeout review and 30-day post-engagement check for {c['client_name']}", 30, "medium")
@@ -558,6 +608,9 @@ class CustomerSuccessAgent(DepartmentAgent):
             }))
         return out
 
+    def _open_tickets(self) -> int:
+        return sum(1 for t in self.state.setdefault("tickets", []) if t["resolved_day"] > self.clock.day)
+
     def _on_ticket(self, c: dict, b: dict) -> list[Message]:
         sev = b.get("severity", "medium")
         sev = sev if sev in SEVERITY_RANK else "medium"
@@ -565,21 +618,49 @@ class CustomerSuccessAgent(DepartmentAgent):
         tier = self._keep_tier(c)
         response_h, resolve_h = SUPPORT_SLA[tier][prio]
         ticket = b.get("ticket_id") or f"TKT-{self._counter('ticket'):04d}"
-        due_days = 0 if tier == "keep_enterprise" and prio in ("P1", "P2") else math.ceil(response_h / 10.0)
+        round_the_clock = tier == "keep_enterprise" and prio in ("P1", "P2")
+        due_days = 0 if round_the_clock else math.ceil(response_h / 10.0)
+        # measured or simulated clocks, then breach tests against the Keep tier targets (SOP-CUSTOMER_SUCCESS-03)
+        load = TICKET_LOAD_BASE + TICKET_LOAD_PER_OPEN * self._open_tickets()
+        actual_resp = b.get("first_response_hours")
+        actual_resp = round(response_h * load, 2) if actual_resp is None else float(actual_resp)
+        actual_res = b.get("resolution_hours")
+        if resolve_h is not None and actual_res is None:
+            actual_res = round(resolve_h * load, 2)
+        actual_res = None if resolve_h is None or actual_res is None else float(actual_res)
+        response_breach = actual_resp > response_h
+        resolution_breach = resolve_h is not None and actual_res is not None and actual_res > resolve_h
+        hours_per_day = 24.0 if round_the_clock else 10.0
+        open_days = P4_OPEN_DAYS if actual_res is None else max(1, math.ceil(actual_res / hours_per_day))
+        self.state.setdefault("tickets", []).append({
+            "ticket_id": ticket, "client_id": c["client_id"], "priority": prio, "keep_tier": tier,
+            "day": self.clock.day, "month": self.clock.date.isoformat()[:7], "first_response_hours": actual_resp,
+            "resolution_hours": actual_res, "response_breach": response_breach,
+            "resolution_breach": resolution_breach, "resolved_day": self.clock.day + open_days})
         self.create_task(f"{prio} ticket {ticket} for {c['client_name']}: first response within {response_h}h",
                          due_days, "critical" if prio == "P1" else "high" if prio == "P2" else "medium")
         self._adjust(c, support=-SUPPORT_HIT[sev])
+        breaches = int(response_breach) + int(resolution_breach)
+        if breaches:
+            self._adjust(c, support=-SLA_BREACH_SUPPORT_HIT * breaches)
+            self.create_task(f"SLA breach on {prio} ticket {ticket} for {c['client_name']}: call the sponsor today; "
+                             f"CCO review within 1 business day", 0, "high")
+            self.log_event("customer_success.activity.sla_breach", ticket, client_id=c["client_id"], priority=prio,
+                           keep_tier=tier, response_breach=response_breach, resolution_breach=resolution_breach,
+                           first_response_hours=actual_resp, resolution_hours=actual_res)
         self.log_event("customer_success.activity.ticket_triaged", ticket, client_id=c["client_id"], priority=prio,
-                       sla_response_hours=response_h, sla_resolution_hours=resolve_h, keep_tier=tier)
+                       sla_response_hours=response_h, sla_resolution_hours=resolve_h, keep_tier=tier,
+                       sla_breaches=breaches)
         if SEVERITY_RANK[sev] >= 3:
             self._note_negative(c, "severe_ticket", f"{prio} support ticket")
-        out = self._rescore(c, f"{prio} support ticket")
+        out = self._rescore(c, f"{prio} support ticket" + (" with SLA breach" if breaches else ""))
         out.extend(self._check_signals(c))
         if SEVERITY_RANK[sev] >= 3:
             out.append(self.emit("customer_success.support_escalated", {
                 "client_id": c["client_id"], "client_name": c["client_name"], "ticket_id": ticket,
                 "severity": sev, "priority": prio, "keep_tier": tier, "sla_response_hours": response_h,
-                "sla_resolution_hours": resolve_h, "summary": b.get("text", "client support escalation"),
+                "sla_resolution_hours": resolve_h, "sla_response_breach": response_breach,
+                "sla_resolution_breach": resolution_breach, "summary": b.get("text", "client support escalation"),
                 "engagement_id": c.get("engagement_id"),
             }))
         return out
@@ -616,16 +697,15 @@ class CustomerSuccessAgent(DepartmentAgent):
                        reason=reason, notice_period_days=notice)
         out = self._rescore(c, f"termination notice ({reason})")
         out.extend(self._flag_risk(c, "critical", f"termination notice ({reason})"))
-        out.append(self.emit("customer_success.internal.save_deadline", {
-            "client_id": c["client_id"], "reason": reason, "notice_period_days": notice,
-        }, recipient=self.department, delay_days=max(1, min(notice // 2, 14))))
+        self._schedule("save_deadline", max(1, min(notice // 2, 14)),
+                       {"client_id": c["client_id"], "reason": reason, "notice_period_days": notice})
         return out
 
-    def _on_save_deadline(self, m: Message) -> list[Message]:
-        c = self._get_client(m.body)
+    def _on_save_deadline(self, payload: dict) -> list[Message]:
+        c = self._get_client(payload)
         if c is None or c["status"] == "churned":
             return []
-        reason = m.body.get("reason", "unspecified")
+        reason = payload.get("reason", "unspecified")
         pre = c["pre_notice_health"] if c["pre_notice_health"] is not None else c["health"]
         saved = reason in SAVEABLE_REASONS and pre >= 55.0 and not c["dispute"]
         if saved:
@@ -651,19 +731,18 @@ class CustomerSuccessAgent(DepartmentAgent):
         out: list[Message] = []
         if c["band"] == "red" or c["dispute"]:
             out.extend(self._flag_risk(c, "high", "renewal proposal issued to at-risk client"))
-        out.append(self.emit("customer_success.internal.renewal_decision", {
-            "client_id": c["client_id"], "contract_id": c["keep"]["contract_id"],
-            "client_decision": b.get("client_decision"),
-        }, recipient=self.department, delay_days=CLIENT_DECISION_WINDOW_DAYS))
+        self._schedule("renewal_decision", CLIENT_DECISION_WINDOW_DAYS,
+                       {"client_id": c["client_id"], "contract_id": c["keep"]["contract_id"],
+                        "client_decision": b.get("client_decision")})
         self.log_event("customer_success.activity.renewal_proposal_noted", c["client_name"],
                        client_id=c["client_id"], amount_gbp=c["keep"]["proposed_amount_gbp"])
         return out
 
-    def _on_renewal_decision(self, m: Message) -> list[Message]:
-        c = self._get_client(m.body)
+    def _on_renewal_decision(self, payload: dict) -> list[Message]:
+        c = self._get_client(payload)
         if c is None or not c["keep"] or c["status"] == "churned":
             return []
-        decision = m.body.get("client_decision")
+        decision = payload.get("client_decision")
         if decision is None:
             decision = "churn" if (c["band"] == "red" or c["dispute"]) else "renew"
         if decision == "churn":
@@ -881,21 +960,162 @@ class CustomerSuccessAgent(DepartmentAgent):
                 c["qbr_quarters"].append(quarter)
                 self.create_task(f"QBR {quarter} for {c['client_name']} ({c['keep']['tier']})", 21, "medium")
 
+    # onboarding handover and Keep attach watches ----------------------------------------------
+    def _complete_handover(self, c: dict) -> None:
+        """The handover pack is issued at delivery kickoff; the clock runs from contract signature."""
+        if not c["handover_pending"] or c["contract_signed_day"] is None:
+            return
+        days = self.clock.day - c["contract_signed_day"]
+        c["handover_pending"], c["handover_done_day"] = False, self.clock.day
+        self.state.setdefault("handover_days", []).append(days)
+        self.log_event("customer_success.activity.handover_completed", c["client_name"], client_id=c["client_id"],
+                       handover_days=days, target_days=HANDOVER_TARGET_DAYS)
+        if days > HANDOVER_TARGET_DAYS and not c["handover_flagged"]:
+            self.create_task(f"Handover for {c['client_name']} took {days} days against {HANDOVER_TARGET_DAYS}: "
+                             f"record the cause", 5, "medium")
+
+    def _handover_watch(self) -> None:
+        for cid in sorted(self.clients):
+            c = self.clients[cid]
+            if (c["handover_pending"] and not c["handover_flagged"] and c["status"] != "churned"
+                    and self.clock.day - c["contract_signed_day"] > HANDOVER_TARGET_DAYS):
+                c["handover_flagged"] = True
+                self.create_task(f"Handover overdue for {c['client_name']}: {HANDOVER_TARGET_DAYS} days since "
+                                 f"signature, agree the success plan and issue the handover pack", 1, "high")
+                self.log_event("customer_success.activity.handover_overdue", c["client_name"], client_id=cid,
+                               days_since_signature=self.clock.day - c["contract_signed_day"])
+
+    def _attach_watch(self) -> None:
+        """Re-offer at 90 days; at the window end an unattached Build or Scale is a policy exception (COMPANY.md §2)."""
+        for key in sorted(self.state.setdefault("attach_ledger", {})):
+            e = self.state["attach_ledger"][key]
+            c = self.clients.get(e["client_id"])
+            if e["attached"] or e["lapsed"] or c is None or c["status"] == "churned":
+                continue
+            age = self.clock.day - e["completed_day"]
+            must_attach = e["tier"] in ("forge_build", "forge_scale")
+            if age >= ATTACH_REOFFER_DAYS and not e["reoffered"]:
+                e["reoffered"] = True
+                self.create_task(f"Re-offer Keep (reduced Essential scope) to {c['client_name']} after "
+                                 f"{e['tier']}", 5, "high" if must_attach else "medium")
+                self.log_event("customer_success.activity.keep_reoffer", c["client_name"], client_id=c["client_id"],
+                               tier=e["tier"], days_since_completion=age)
+            if age >= ATTACH_WINDOW_DAYS:
+                e["lapsed"] = True
+                if must_attach:
+                    self.create_task(f"Keep not attached within 12 months of {e['tier']} at {c['client_name']}: "
+                                     f"policy exception for the CCO to record with the CEO (COMPANY.md §2)", 2,
+                                     "critical")
+                self.log_event("customer_success.activity.keep_attach_lapsed", c["client_name"],
+                               client_id=c["client_id"], tier=e["tier"], policy_exception=must_attach)
+
+    # hiring (SOP-CUSTOMER_SUCCESS-14) -----------------------------------------------------------
+    def _seat_start_year(self) -> int:
+        """Year the seat starts: request day plus the time to hire, rounded up to the next quarter start
+        (seats start at quarter starts, blueprint.md section 5)."""
+        earliest = self.clock.date_of(self.clock.day + TIME_TO_HIRE_DAYS)
+        if earliest.day == 1 and earliest.month in (1, 4, 7, 10):
+            return earliest.year
+        return earliest.year + (1 if (earliest.month - 1) // 3 * 3 + 4 > 12 else 0)
+
+    def _request_hire(self, role: str, count: int, trigger: str, **detail) -> Message:
+        """Publish a hire request. A request that takes the role (or the department) above the year-end headcount plan
+        for the year the seat would start in is marked as an escalation to the CEO (executive.headcount_approved)."""
+        hires = self.state.setdefault("hires", {})
+        after = hires.get(role, 0) + count
+        plan_year = min(max(self._seat_start_year(), 2026), 2028)
+        role_plan = ROLE_PLAN[role][plan_year]
+        humans_after = 1 + sum(hires.values()) + count
+        outside = after > role_plan or humans_after > HEADCOUNT[plan_year][0]
+        hires[role] = after
+        body = {
+            "role_title": role, "level": ROLE_LEVEL[role], "count": count, "department": "customer_success",
+            "trigger": trigger, "plan_year": plan_year, "planned_role_headcount": role_plan,
+            "role_requested_total": after, "planned_department_humans": HEADCOUNT[plan_year][0],
+            "outside_headcount_plan": outside,
+            "approval_path": "people.requisition_opened then executive.headcount_approved",
+            "summary": f"Request {count} {role}(s): {trigger}", **detail}
+        if outside:
+            body["escalated_to"] = "Chief Executive Officer"
+            body["summary"] += f" (outside the FY{plan_year} headcount plan, CEO decision needed)"
+            self.create_task(f"Escalate to the CEO: {role} request is outside the FY{plan_year} headcount plan "
+                             f"({trigger})", 2, "critical")
+            self.log_event("customer_success.activity.hire_escalated", role, count=count, plan_year=plan_year,
+                           planned_role_headcount=role_plan, role_requested_total=after)
+        return self.emit("customer_success.hire_requested", body)
+
     def _capacity_check(self) -> list[Message]:
         active = sum(1 for c in self.clients.values() if c["status"] != "churned")
-        planned = self.state.setdefault("named_csm_planned", 1)
+        planned = 1 + self.state.setdefault("hires", {}).get(ROLE_CSM, 0)
         needed = max(1, math.ceil(active / CLIENTS_PER_NAMED_CSM))
         if needed <= planned:
             return []
-        extra = needed - planned
-        self.state["named_csm_planned"] = needed
-        return [self.emit("customer_success.hire_requested", {
-            "role_title": "Customer Success Manager", "level": "manager", "count": extra,
-            "department": "customer_success", "active_clients": active,
-            "clients_per_csm_ceiling": CLIENTS_PER_NAMED_CSM,
-            "trigger": f"{active} active clients exceed {CLIENTS_PER_NAMED_CSM} per named CSM",
-            "summary": f"Request {extra} Customer Success Manager(s) for client coverage",
-        })]
+        return [self._request_hire(
+            ROLE_CSM, needed - planned, f"{active} active clients exceed {CLIENTS_PER_NAMED_CSM} per named CSM",
+            active_clients=active, clients_per_csm_ceiling=CLIENTS_PER_NAMED_CSM)]
+
+    def _monthly_hiring_review(self) -> list[Message]:
+        """Support desk and renewals triggers, measured on the month just ended (blueprint.md section 5)."""
+        prev = (self.clock.date.replace(day=1) - timedelta(days=1)).isoformat()[:7]
+        reviewed = self.state.setdefault("reviewed_months", [])
+        if prev in reviewed:
+            return []
+        reviewed.append(prev)
+        out: list[Message] = []
+        hires = self.state.setdefault("hires", {})
+        month = [t for t in self.state.setdefault("tickets", []) if t["month"] == prev]
+        live_keep = sum(1 for c in self.clients.values() if c["keep"] and c["status"] != "churned")
+        streak = self.state.get("sla_months_below", 0)
+        sla_pct = None
+        if month:
+            sla_pct = 100.0 * sum(1 for t in month if not t["response_breach"]) / len(month)
+            streak = streak + 1 if sla_pct < SLA_HIRE_FLOOR_PCT else 0
+        have = hires.get(ROLE_SPECIALIST, 0)
+        want, reasons = have, []
+        if len(month) > TICKETS_MONTH_FIRST_SPECIALIST:
+            want, reasons = max(want, 1), reasons + [f"{len(month)} tickets in {prev}"]
+        if live_keep > LIVE_KEEP_FIRST_SPECIALIST:
+            want, reasons = max(want, 1), reasons + [f"{live_keep} live Keep clients"]
+        if len(month) > TICKETS_MONTH_THIRD_SPECIALIST:
+            want = max(want, 3)
+        if streak >= SLA_HIRE_MONTHS:
+            want, reasons, streak = max(want, have + 1), reasons + [
+                f"first-response SLA below {SLA_HIRE_FLOOR_PCT:.0f}% for {SLA_HIRE_MONTHS} months"], 0
+        self.state["sla_months_below"] = streak
+        if want > have:
+            out.append(self._request_hire(ROLE_SPECIALIST, want - have, "; ".join(reasons) or "support volume",
+                                          tickets_in_month=len(month), live_keep_clients=live_keep,
+                                          first_response_sla_pct=None if sla_pct is None else round(sla_pct, 1)))
+        renewals = sum(1 for c in self.clients.values() if c["keep"] and c["status"] != "churned"
+                       and 0 <= c["keep"]["term_end_day"] - self.clock.day <= 365)
+        if renewals > RENEWALS_FOR_MANAGER and hires.get(ROLE_RENEWALS, 0) < 1:
+            out.append(self._request_hire(ROLE_RENEWALS, 1, f"{renewals} Keep renewals in the next 12 months",
+                                          renewals_next_12_months=renewals))
+        self.log_event("customer_success.activity.monthly_hiring_review", prev, tickets=len(month),
+                       live_keep=live_keep, requests=len(out))
+        return out
+
+    # reporting ------------------------------------------------------------------------------
+    def kpi_snapshot(self) -> list[Kpi]:
+        """KPIS with actuals measured from the state (a KPI with no data yet stays None; kpis.md section 2)."""
+        actual: dict[str, float] = {}
+        live = [c for c in self.clients.values() if c["status"] != "churned"]
+        if live:
+            actual["avg_health_score"] = round(statistics.fmean(c["health"] for c in live), 1)
+            actual["green_client_share"] = round(100.0 * sum(1 for c in live if c["band"] == "green") / len(live), 1)
+        tickets = self.state.get("tickets", [])
+        if tickets:
+            actual["support_first_response_sla"] = round(
+                100.0 * sum(1 for t in tickets if not t["response_breach"]) / len(tickets), 1)
+        if self.state.get("handover_days"):
+            actual["onboarding_handover_days"] = float(statistics.median(self.state["handover_days"]))
+        ledger = list(self.state.get("attach_ledger", {}).values())
+        for kpi_id, tiers in (("keep_attach_forge_build_scale", ("forge_build", "forge_scale")),
+                              ("keep_attach_compass_programme", ("compass_programme",))):
+            rows = [e for e in ledger if e["tier"] in tiers]
+            if rows:
+                actual[kpi_id] = round(100.0 * sum(1 for e in rows if e["attached"]) / len(rows), 1)
+        return [replace(k, actual=actual.get(k.name)) for k in KPIS]
 
 
 def build_agent(llm, bus, clock, log) -> CustomerSuccessAgent:

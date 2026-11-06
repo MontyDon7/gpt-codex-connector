@@ -25,7 +25,7 @@ Conventions used throughout:
 | SOP-CUSTOMER_SUCCESS-11 | QBRs and release communications | Quarterly schedule (first month of each quarter), `product.release_shipped` | Customer Success Manager | QBR held within 21 days of quarter start; breaking-change notice 5 days before the change window |
 | SOP-CUSTOMER_SUCCESS-12 | Case-study and reference eligibility | `marketing.case_study_requested` | Chief Customer Officer | Eligibility answer within 5 business days of the request |
 | SOP-CUSTOMER_SUCCESS-13 | Budget, OKRs, strategy and crisis response | `finance.budget_cycle_opened`, `executive.budget_approved`, `executive.okrs_set`, `executive.strategy_updated`, `executive.crisis_declared` | Chief Customer Officer | Budget submitted within the Finance cycle deadline; OKR-to-KPI mapping within 10 days; crisis outreach to Enterprise and non-green clients within 1 day |
-| SOP-CUSTOMER_SUCCESS-14 | Capacity and hiring | Weekly schedule (capacity check), `customer_success.hire_requested` raised when clients exceed 22 per named client manager | Chief Customer Officer | Hire request raised the same week the ceiling is crossed |
+| SOP-CUSTOMER_SUCCESS-14 | Capacity and hiring | Weekly schedule (capacity check), monthly hiring review; `customer_success.hire_requested` raised when a trigger is crossed | Chief Customer Officer | Hire request raised the same week (capacity) or on the first day of the next month (support and renewals triggers) the trigger is crossed |
 
 Topic coverage: every subscribed topic is the trigger of at least one SOP above, and every published topic appears in the outputs of at least one SOP (see the checklist at the end of this document).
 
@@ -65,6 +65,7 @@ Signal effects on components (each component stays between 0 and 100):
 | `delivery.engagement_completed` | delivery +10 |
 | `delivery.quality_issue_raised` critical / high / medium / low | delivery -30 / -20 / -10 / -5 and sentiment -15 / -10 / -5 / -2.5 |
 | Support ticket P1 / P2 / P3 / P4 | support -25 / -15 / -5 / 0 |
+| Keep SLA breach (each missed first-response or resolution target on a ticket) | support -10 (`SLA_BREACH_SUPPORT_HIT`) |
 | Security incident detected, severity critical / high / medium / low | support -25 / -15 / -5 / 0 |
 | `it_security.incident_resolved` | support +20 |
 | `it_security.data_breach_confirmed` | support -40, sentiment -30, engagement -10 |
@@ -87,7 +88,7 @@ Priority mapping from ticket severity: critical = P1, high = P2, medium = P3, lo
 | P3 | 20 / 50 | 10 / 30 | 4 / 20 |
 | P4 | 30 / none | 20 / none | 10 / none |
 
-Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which run 24x7 (COMPANY.md §3.3 24x7 incident cover). Clients without a Keep contract (for example in the 30-day post-engagement warranty window) are served at Keep Essential targets. A first-response task is due after ceil(first response hours / 10) days, or the same day for Enterprise P1 and P2. Support days included: Essential 5 a quarter, Plus 15 a quarter, Enterprise an embedded team (COMPANY.md §3.3).
+Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which run 24x7 (COMPANY.md §3.3 24x7 incident cover). Clients without a Keep contract (for example in the 30-day post-engagement warranty window) are served at Keep Essential targets. A first-response task is due after ceil(first response hours / 10) days, or the same day for Enterprise P1 and P2. A ticket breaches when its first-response time exceeds the first-response target or its resolution time exceeds the resolution target of the client's tier and priority (P4 has no resolution target). The times are the measured `first_response_hours` and `resolution_hours` on the ticket when present; otherwise the simulation estimates each as target x (0.5 + 0.25 x tickets still open on the desk), so a quiet desk answers at half the target and a desk with more than two other open tickets starts to breach. A ticket stays open for ceil(resolution hours / 10) days (24 for Enterprise P1 and P2; 5 days for P4). Support days included: Essential 5 a quarter, Plus 15 a quarter, Enterprise an embedded team (COMPANY.md §3.3).
 
 ### Renewal, churn and capacity constants
 
@@ -102,9 +103,27 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 | Churn post-mortem | 21 days (15 business days) after `customer_success.client_churned` | Department assumption |
 | Compound churn-risk signal window | 30 days (`SIGNAL_WINDOW_DAYS`) | Department assumption |
 | Compound churn-risk signals needed to flag | 2 distinct signals in the window (`SIGNAL_MIN_COUNT`) | Department assumption |
-| Clients per named client manager | 22 | economics.md section 4 |
+| Clients per named client manager | 22 (`CLIENTS_PER_NAMED_CSM`) | economics.md section 4 |
 | Reference eligibility | green band, last NPS 9 or above, no dispute, not churned, completed engagement or live Keep contract | Department assumption |
 | Collections ladder (Finance owns) | reminder day 31, call day 38, finance-head escalation day 45, legal letter day 60 | COMPANY.md §7 |
+
+### Support desk, handover, Keep attach and hiring constants
+
+| Constant (code name) | Value | Source |
+|---|---|---|
+| `SLA_BREACH_SUPPORT_HIT` | 10 points of support component per breach | Department assumption |
+| `TICKET_LOAD_BASE` | 0.5 (fraction of target at an empty desk) | Department assumption |
+| `TICKET_LOAD_PER_OPEN` | 0.25 (added fraction per other open ticket) | Department assumption |
+| `HANDOVER_TARGET_DAYS` | 15 days from contract signature (kpis.md FY2026) | kpis.md |
+| `ATTACH_REOFFER_DAYS` | 90 days after completion | SOP-CUSTOMER_SUCCESS-08 |
+| `ATTACH_WINDOW_DAYS` | 365 days after completion | kpis.md |
+| `CLIENTS_PER_NAMED_CSM` | 22 clients per named client manager | economics.md section 4 |
+| `TICKETS_MONTH_FIRST_SPECIALIST` | 30 (more than, tickets in a month) | blueprint.md section 5 |
+| `LIVE_KEEP_FIRST_SPECIALIST` | 8 (more than, live Keep clients) | blueprint.md section 5 |
+| `TICKETS_MONTH_THIRD_SPECIALIST` | 150 (more than, tickets in a month) | blueprint.md section 5 |
+| `SLA_HIRE_FLOOR_PCT` | 95 (percent, first-response SLA for two months running) | blueprint.md section 5 |
+| `RENEWALS_FOR_MANAGER` | 30 (more than, Keep renewals in the next 12 months) | blueprint.md section 5 |
+| `TIME_TO_HIRE_DAYS` | 45 days | COMPANY.md §8 |
 
 ---
 
@@ -122,13 +141,13 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 4. [agent] On `finance.billing_schedule_created`, record the schedule and create a task to confirm invoice contacts and purchase-order references (due in 3 days).
 5. [agent] On `delivery.engagement_kickoff`, set status `in_delivery`, add engagement +5 to the health model, and create the handover pack and sponsor check-in task (due in 5 days).
 6. [human] Customer Success Manager agrees the success plan (outcomes, adoption targets, QBR dates, escalation path) with the sponsor and signs off the handover pack. The 15-day clock is stopped when the plan is agreed and the pack is accepted.
-7. [agent] Record the handover duration for the `onboarding_handover_days` KPI and publish the baseline score.
+7. [agent] Record the handover duration for the `onboarding_handover_days` KPI: calendar days from `legal.contract_signed` to the delivery kickoff, when the handover pack is issued (a contract that starts more than 30 days before signature is a migration and has no clock). If no kickoff has arrived 15 days after signature, create a high-priority overdue task and log `customer_success.activity.handover_overdue` once; a handover that completes late creates a task to record the cause.
 
 ### Outputs and messages
 
 - `customer_success.health_score_updated` to broadcast (`*`; sales, delivery, data): `client_id`, `client_name`, `health_score` (baseline 76.5), `band`, `previous_score`, `previous_band`, `reason` ("new client baseline", "Keep contract signed"), `drivers`, `service_line`, `tier`, `amount_gbp`, `summary`.
 - Tasks: welcome call, success plan, Keep onboarding, invoice contacts, handover pack.
-- Activity log: `customer_success.activity.client_record_opened`, `onboarding_started`, `contract_recorded`, `billing_schedule_noted`, `kickoff_handover`.
+- Activity log: `customer_success.activity.client_record_opened`, `onboarding_started`, `contract_recorded`, `billing_schedule_noted`, `kickoff_handover`, `handover_completed`, `handover_overdue`.
 
 ### SLA and controls
 
@@ -193,15 +212,16 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 2. [agent] Create the first-response task with the SLA wording (due after ceil(first-response hours / 10) days; same day for Enterprise P1 and P2). Priority of the task: critical for P1, high for P2, medium otherwise.
 3. [agent] Reduce the support component (P1 25, P2 15, P3 5, P4 0) and rescore (SOP-CUSTOMER_SUCCESS-02).
 4. [human] Client Support Specialist replies to the client within the first-response target, confirms priority with the client, and coordinates with the Delivery Keep pod for fixes. P1 and P2 are owned by the Client Support Lead from FY2028.
-5. [agent] For P1 and P2, publish `customer_success.support_escalated` so Delivery and Product can act; include the SLA targets so the receiving department sees the clock.
-6. [human] On resolution, confirm with the client, record the support-day drawdown against the quarterly entitlement (Essential 5, Plus 15), and send the CSAT survey (SOP-CUSTOMER_SUCCESS-04).
-7. [human] Within 2 business days of closing a P1, hold a short review (cause, client impact, prevention) and attach it to the client record.
+5. [agent] Record the ticket with its first-response and resolution times and test both against the tier targets. For each missed target record an SLA breach (`customer_success.activity.sla_breach`), reduce the support component by 10 on top of the severity reduction, and create a same-day task to call the sponsor with the Chief Customer Officer review within 1 business day. The `support_first_response_sla` KPI is the share of tickets with no first-response breach.
+6. [agent] For P1 and P2, publish `customer_success.support_escalated` so Delivery and Product can act; include the SLA targets and the breach flags so the receiving department sees the clock.
+7. [human] On resolution, confirm with the client, record the support-day drawdown against the quarterly entitlement (Essential 5, Plus 15), and send the CSAT survey (SOP-CUSTOMER_SUCCESS-04).
+8. [human] Within 2 business days of closing a P1, hold a short review (cause, client impact, prevention) and attach it to the client record.
 
 ### Outputs and messages
 
-- `customer_success.support_escalated` to broadcast (`*`; delivery, product): `client_id`, `client_name`, `ticket_id`, `severity`, `priority`, `keep_tier`, `sla_response_hours`, `sla_resolution_hours`, `summary`, `engagement_id`.
+- `customer_success.support_escalated` to broadcast (`*`; delivery, product): `client_id`, `client_name`, `ticket_id`, `severity`, `priority`, `keep_tier`, `sla_response_hours`, `sla_resolution_hours`, `sla_response_breach`, `sla_resolution_breach`, `summary`, `engagement_id`.
 - `customer_success.health_score_updated` when the support component moves the band or the score by 5 points.
-- Activity log: `customer_success.activity.ticket_triaged`.
+- Activity log: `customer_success.activity.ticket_triaged`, `sla_breach`.
 
 ### SLA and controls
 
@@ -330,7 +350,7 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 ## SOP-CUSTOMER_SUCCESS-07: Keep renewals
 
 **Owner**: Renewals and Commercial Manager (Chief Customer Officer until Q1 FY2028). Agent: Renewals and Expansion Agent.
-**Trigger**: the daily renewal scan (a Keep term end 90 days away) and `sales.renewal_proposal_sent` (Sales has sent the proposal). Internal timers: client decision (14 days after the proposal).
+**Trigger**: the daily renewal scan (a Keep term end 90 days away) and `sales.renewal_proposal_sent` (Sales has sent the proposal). The client decision is a queued item the agent processes on the tick 14 days after the proposal (no separate message).
 **Inputs**: `client_id`, `contract_id`, tier, annual value, term-end day, health score and band, `amount_gbp` of the proposal, `client_decision`.
 
 ### Steps
@@ -389,7 +409,7 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 ### SLA and controls
 
 - SLA: recommendation published on the same sim day as `delivery.engagement_completed`; closeout review within 30 days; NPS survey sent 7 days after completion.
-- Control: KPI `keep_attach_forge_build_scale` target 75% (FY2026) and `keep_attach_compass_programme` target 40%; unattached Build and Scale clients are listed at the monthly pack with the reason.
+- Control: COMPANY.md §2 is the rule: Keep attaches to every Forge Build and Scale, and to at least 40% of Compass Programmes. KPI `keep_attach_forge_build_scale` target is therefore 100% in every year and `keep_attach_compass_programme` target 40% (FY2028 stretch 45%). The agent keeps a ledger of completed Build, Scale and Programme engagements: attached when a Keep contract is live at completion or signed within 365 days. At 90 days unattached it creates a re-offer task (reduced Essential scope); when the 365-day window closes on a Build or Scale it logs `customer_success.activity.keep_attach_lapsed` and creates a critical task for the Chief Customer Officer to record the policy exception with the CEO. Unattached Build and Scale clients are listed at the monthly pack with the reason.
 - Control: no recommendation while a dispute is open or the client is red.
 
 ### Exceptions and escalation
@@ -439,7 +459,7 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 ## SOP-CUSTOMER_SUCCESS-10: Termination notice, save deadline and churn post-mortem
 
 **Owner**: Chief Customer Officer (Tobias Lindgren).
-**Trigger**: `external.client_notice_of_termination` (a client serves notice). Internal events: the save deadline and the non-renewal decision from SOP-CUSTOMER_SUCCESS-07.
+**Trigger**: `external.client_notice_of_termination` (a client serves notice). The save deadline is a queued item the agent processes on the tick; the non-renewal decision comes from SOP-CUSTOMER_SUCCESS-07.
 **Inputs**: `client_id`, `reason`, `notice_period_days` (default 30), health before the notice, dispute status, contract terms.
 
 ### Steps
@@ -458,7 +478,7 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 - `customer_success.churn_risk_flagged` (critical) at notice.
 - `customer_success.health_score_updated` after the notice and again after a save (forced).
 - `customer_success.client_churned` to broadcast (`*`; finance, sales, executive, data): `client_id`, `client_name`, `amount_gbp`, `reason`, `churn_type`, `service_line`, `tier`, `health_at_churn`, `last_nps`, `post_mortem_due_day`, `summary`.
-- Internal: `customer_success.internal.save_deadline` (direct to the department, not delivered elsewhere).
+- No private topic is used: the save deadline is state held by the agent and acted on by `tick()`.
 
 ### SLA and controls
 
@@ -579,25 +599,29 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 ## SOP-CUSTOMER_SUCCESS-14: Capacity and hiring
 
 **Owner**: Chief Customer Officer (Tobias Lindgren).
-**Trigger**: a weekly schedule (the capacity check runs with the Monday health review and on every new client). The topic `customer_success.hire_requested` is the output; the approval path is `people.requisition_opened` and `executive.headcount_approved`.
-**Inputs**: active (non-churned) clients, named client managers planned (the CCO counts as one), clients-per-manager ceiling of 22, ticket volume, SLA performance, renewal calendar.
+**Trigger**: a weekly schedule (the capacity check runs with the Monday health review and on every new client) and a monthly hiring review on the first day of each month. The topic `customer_success.hire_requested` is the output; the approval path is `people.requisition_opened` and `executive.headcount_approved`.
+**Inputs**: active (non-churned) clients, named client managers planned (the CCO counts as one), clients-per-manager ceiling of 22, tickets in the month just ended and their first-response breaches, live Keep clients, Keep renewals in the next 12 months, the year-end headcount plan by role (blueprint.md section 3).
 
 ### Steps
 
-1. [agent] Count active clients. Compute named client managers needed = ceil(active clients / 22), at least 1.
-2. [agent] If the number needed exceeds the number planned, record the new plan and publish `customer_success.hire_requested` for the extra Customer Success Managers (level manager).
-3. [human] Chief Customer Officer reviews the request against the blueprint triggers (blueprint.md section 5), the approved budget and the pipeline of new logos from Sales.
-4. [human] People opens the requisition (`people.requisition_opened`) and the CEO approves headcount (`executive.headcount_approved`) where the hire is outside the approved budget.
-5. [human] Other triggers are reviewed each quarter by the Chief Customer Officer: monthly tickets above 30 (first Client Support Specialist), more than 30 Keep renewals in the next 12 months (Renewals and Commercial Manager), first-response SLA below 95% for two months (extra specialist). These are raised as `customer_success.hire_requested` by the Chief Customer Officer when needed.
+1. [agent] Weekly and on every new client: count active clients. Compute named client managers needed = ceil(active clients / 22), at least 1.
+2. [agent] If the number needed exceeds the number planned, request the extra Customer Success Managers (level manager).
+3. [agent] Monthly, for the month just ended (each month is reviewed once): request the first Client Support Specialist (level consultant) when tickets exceed 30 or live Keep clients exceed 8; an extra specialist when the first-response SLA was below 95% in two consecutive months with tickets; a third when tickets exceed 150; one Renewals and Commercial Manager when Keep renewals in the next 12 months exceed 30.
+4. [agent] Headcount plan check on every request: the plan year is the fiscal year in which the seat would start (request day plus 45 days, rounded up to the next quarter start, because seats start at quarter starts). If the role total would exceed the year-end plan for that role, or the department would exceed its year-end humans (1 / 6 / 14), the request is published with `outside_headcount_plan` true and `escalated_to` Chief Executive Officer, and a critical task is created for the CCO to take it to the CEO. It is never held back or dropped.
+5. [human] Chief Customer Officer reviews the request against the blueprint triggers (blueprint.md section 5), the approved budget and the pipeline of new logos from Sales. An escalated request needs the CEO's decision (`executive.headcount_approved`) before any requisition proceeds.
+6. [human] People opens the requisition (`people.requisition_opened`) and the CEO approves headcount (`executive.headcount_approved`), always for an escalated request and for any hire outside the approved budget.
+7. [human] Roles that rest on judgement stay human-triggered by the Chief Customer Officer and are not raised by the agent: Client Support Lead (desk of three plus the Enterprise 24x7 rota), Customer Success Analyst, and the second specialist for the Enterprise rota.
 
 ### Outputs and messages
 
-- `customer_success.hire_requested` to `people`: `role_title` (Customer Success Manager), `level` (manager), `count`, `department`, `active_clients`, `clients_per_csm_ceiling`, `trigger`, `summary`.
+- `customer_success.hire_requested` to `people`: `role_title` (Customer Success Manager, Client Support Specialist or Renewals and Commercial Manager), `level`, `count`, `department`, `trigger`, `plan_year`, `planned_role_headcount`, `role_requested_total`, `planned_department_humans`, `outside_headcount_plan`, `approval_path`, `escalated_to` (only when outside the plan), `summary`; plus `active_clients` and `clients_per_csm_ceiling` (capacity trigger) or `tickets_in_month`, `live_keep_clients`, `first_response_sla_pct` (support trigger) or `renewals_next_12_months`.
+- Tasks: escalation to the CEO for a request outside the plan.
+- Activity log: `customer_success.activity.hire_escalated`, `monthly_hiring_review`.
 
 ### SLA and controls
 
-- SLA: request raised the same sim week the ceiling is crossed; time-to-hire 45 days (COMPANY.md §8).
-- Control: the CCO is counted as the first named client manager; in FY2026 the 23rd active client would raise a request that exceeds the FY2026 plan of one human, which is intentionally escalated to the CEO for a decision rather than silently ignored.
+- SLA: capacity request raised the same sim week the ceiling is crossed; support and renewals requests on the first day of the following month; time-to-hire 45 days (COMPANY.md §8).
+- Control: the CCO is counted as the first named client manager; in FY2026 the 23rd active client in the first three quarters raises a Customer Success Manager request that exceeds the FY2026 plan of one human, which is escalated to the CEO for a decision rather than silently ignored. From 18 August 2026 the same request is for a seat starting at the beginning of FY2027 (the blueprint's Q4 FY2026 requisition for Customer Success Manager 1) and is inside the plan.
 
 ### Exceptions and escalation
 
