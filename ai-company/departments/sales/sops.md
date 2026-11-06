@@ -20,7 +20,7 @@ Conventions used throughout:
 | SOP-SALES-03 | Proposal build, pricing and deal desk | `finance.pricing_check_completed` | Sales Operations Manager | Proposal ready within 3 days of both gates; sent within 10 days of the request |
 | SOP-SALES-04 | Security review and contract terms | `it_security.security_questionnaire_completed`, `legal.security_terms_reviewed`, `legal.contract_risk_flagged`, `it_security.certification_status_updated` | Solutions Consultant | Security review 10 days; high-risk contract flag actioned within 3 days |
 | SOP-SALES-05 | Deal approval under the delegations of authority | `executive.deal_decision_made` | Chief Revenue Officer | Approval pack within 1 BD of build; decision requested within 5 days |
-| SOP-SALES-06 | Close, contract hand-off and commission accrual | `legal.contract_drafted`, `legal.contract_signed` and the client decision timer `sales.internal.client_decision` | Account Executive | Contract walk-through within 3 days of draft; contract due 14 days after acceptance |
+| SOP-SALES-06 | Close, contract hand-off and commission accrual | `legal.contract_drafted`, `legal.contract_signed` and the daily client-decision check | Account Executive | Contract walk-through within 3 days of draft; contract due 14 days after acceptance |
 | SOP-SALES-07 | RFP bid decision and response | `external.rfp_received` | Solutions Consultant | Bid or no-bid within 2 BD; response before the client deadline |
 | SOP-SALES-08 | Renewals and churn defence | `customer_success.renewal_due`, `customer_success.renewal_confirmed`, `customer_success.churn_risk_flagged`, `customer_success.client_churned`, `customer_success.health_score_updated` | Renewals and Expansion Manager | Renewal proposal at least 60 days before term end; executive call within 2 days of a churn flag |
 | SOP-SALES-09 | Expansion, next offer and change orders | `customer_success.expansion_opportunity_identified`, `delivery.engagement_completed`, `delivery.scope_change_requested` | Senior Account Executive | Expansion deal opened within 1 BD; change order priced within 2 BD |
@@ -204,18 +204,19 @@ Conventions used throughout:
 ## SOP-SALES-06: Close, contract hand-off and commission accrual
 
 **Owner**: Account Executive (Senior Account Executive for £260k or more).
-**Trigger**: `legal.contract_drafted`, `legal.contract_signed`, and the client decision timer `sales.internal.client_decision` (an internal message the agent sends itself when a proposal is issued; it stands for the client's answer, which in operation is recorded by the Account Executive).
+**Trigger**: `legal.contract_drafted`, `legal.contract_signed`, and the daily client-decision check (a tick rule: when a proposal is issued the agent stores a decision date from the tier window, `economics.md` section 3.7, and a negotiation date at 70% of the window; the check stands for the client's answer, which in operation is recorded by the Account Executive). No internal bus topic is used.
 **Inputs**: `deal_id`, `contract_id` (`CT-nnnn`), signed contract, client decision and reason, `delay_days` (client decision window by tier, `economics.md` section 3.7).
 
 ### Steps
 
-1. [human] Account Executive records the client's decision on the deal (accept, decline, no decision, timing) and, for a decline, the loss reason: `price`, `competitor`, `no_decision` or `timing` (others are logged as free text).
-2. [agent] On acceptance: stage becomes `contract`, bookings and cycle days are recorded, and `sales.deal_won` is emitted to Legal (contract drafting), Finance (billing schedule), Delivery (staffing), Customer Success, Executive and Data. The contract is due 14 days after acceptance.
-3. [agent] On decline: stage `lost`, loss recorded, `sales.deal_lost` emitted (to Marketing for win and loss review and nurture, Executive, Data).
-4. [agent] On `legal.contract_drafted`: store `contract_id` and raise a high-priority task to walk the client through the contract within 3 days.
-5. [human] Account Executive walks the client's sponsor and procurement through the contract with Legal on call; changes go to Legal, never agreed by Sales.
-6. [agent] On `legal.contract_signed`: stage `won`; commission accrued at 1.7% of the net contract value (`economics.md` section 3.4) and logged.
-7. [human] Account Executive introduces the client to the Delivery engagement lead and the Customer Success manager within 2 BD of signature and records the hand-over pack (stakeholders, success criteria, commercial promises).
+1. [agent] At 70% of the decision window, a deal that will be won moves from `proposal_sent` to `negotiation` (redlines or a verbal yes; weight 0.60); a high-risk contract flag (SOP-SALES-04) moves it there at once.
+2. [human] Account Executive records the client's decision on the deal (accept, decline, no decision, timing) and, for a decline, the loss reason: `price`, `competitor`, `no_decision` or `timing` (others are logged as free text).
+3. [agent] On acceptance: stage becomes `contract`, bookings and cycle days are recorded, and `sales.deal_won` is emitted to Legal (contract drafting), Finance (billing schedule), Delivery (staffing), Customer Success, Executive and Data. The contract is due 14 days after acceptance.
+4. [agent] On decline: stage `lost`, loss recorded, `sales.deal_lost` emitted (to Marketing for win and loss review and nurture, Executive, Data).
+5. [agent] On `legal.contract_drafted`: store `contract_id` and raise a high-priority task to walk the client through the contract within 3 days.
+6. [human] Account Executive walks the client's sponsor and procurement through the contract with Legal on call; changes go to Legal, never agreed by Sales.
+7. [agent] On `legal.contract_signed`: stage `won`; commission accrued at 1.7% of the net contract value (`economics.md` section 3.4) and logged.
+8. [human] Account Executive introduces the client to the Delivery engagement lead and the Customer Success manager within 2 BD of signature and records the hand-over pack (stakeholders, success criteria, commercial promises).
 
 ### Outputs and messages
 
@@ -467,7 +468,7 @@ Conventions used throughout:
 2. [agent] Raise a critical task to re-forecast the pipeline and brief the top-10 opportunities by weighted value within 2 days.
 3. [human] CRO calls the top-10 sponsors within 2 days, confirms commitment and timing, and agrees client messaging with the CEO and Marketing's CMO (Sofia Lindqvist); no new proposal goes out without the CRO's review.
 4. [human] Sales Director pauses outbound sequences that cite the affected area; SDRs hold prospect emails until Marketing issues crisis-approved wording.
-5. [human] CRO reports daily to the CEO; crisis mode is lifted only by an instruction from the CEO recorded on the deal log.
+5. [human] CRO reports daily to the CEO; crisis mode is lifted only by an instruction from the CEO recorded on the deal log. In the agent the instruction is `executive.crisis_declared` (or `executive.strategy_updated`) with a lifting `status` (`lifted`, `resolved`, `closed`, `stood_down`, `cleared`, `ended`), or closing the lift task the agent raised; after 30 days a confirmation task is raised to the CEO but the mode stays on.
 
 ### Outputs and messages
 
