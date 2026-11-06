@@ -181,7 +181,6 @@ class CustomerSuccessAgent(DepartmentAgent):
             "executive.crisis_declared": self._on_crisis,
             "customer_success.internal.renewal_decision": self._on_renewal_decision,
             "customer_success.internal.save_deadline": self._on_save_deadline,
-            "customer_success.internal.sla_check": self._on_sla_check,
         }
 
     # contract -----------------------------------------------------------------------------

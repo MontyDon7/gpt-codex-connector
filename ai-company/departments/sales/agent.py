@@ -36,6 +36,16 @@ NEXT_OFFER: dict[str, str] = {  # land-and-expand ladder, COMPANY.md §2 and §1
 ICP_MIN_EMPLOYEES, ICP_MAX_EMPLOYEES = 200, 2_000                      # COMPANY.md §2
 ICP_INDUSTRIES = ("financial_services", "healthcare_services", "logistics", "manufacturing", "retail",
                   "professional_services")                             # COMPANY.md §2
+SENIOR_ROLE_MARKERS = ("chief", "ceo", "cfo", "coo", "cto", "cio", "cdo", "vp ", "vice president",
+                       "managing director", "director", "partner", "head of", "president")
+
+
+def _norm_sector(value) -> str:
+    """Normalise a sector label ('Financial services', 'healthcare') to the ICP vocabulary."""
+    key = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return "healthcare_services" if key == "healthcare" else key
+
+
 DISCOUNT_SALES_HEAD_MAX_PCT = 10.0                                     # COMPANY.md §9.3
 DEAL_CEO_THRESHOLD_GBP = 500_000                                       # COMPANY.md §9.3
 DEAL_BOARD_THRESHOLD_GBP = 1_500_000                                   # COMPANY.md §9.3
@@ -323,19 +333,29 @@ class SalesAgent(DepartmentAgent):
     # SOP-SALES-01 lead qualification
     # ------------------------------------------------------------------------------------------------
     def _score_lead(self, body: dict) -> tuple[int, list[str]]:
-        """Deterministic qualification score (0 to 100) and the reasons behind it."""
+        """Deterministic qualification score (0 to 100) and the reasons behind it.
+
+        Rubric is SOP-SALES-01 step 4: size 30, ICP sector 20, board-level sponsor 25, defined
+        pain 15, budget confirmed 10. Reads Marketing's lead keys (`sector`, `contact_role`,
+        `score_reasons`) as well as the CRM-native ones (`industry`, `board_sponsor`, `pain`).
+        """
         score, reasons = 0, []
         employees = int(_num(body.get("employees")))
         if ICP_MIN_EMPLOYEES <= employees <= ICP_MAX_EMPLOYEES:
             score += 30
             reasons.append("size_in_icp")
-        if body.get("industry") in ICP_INDUSTRIES:
+        if _norm_sector(body.get("sector") or body.get("industry")) in ICP_INDUSTRIES:
             score += 20
             reasons.append("icp_industry")
-        if body.get("board_sponsor", body.get("has_sponsor")):
+        mkt_reasons = body.get("score_reasons") or ()
+        if isinstance(mkt_reasons, str):
+            mkt_reasons = (mkt_reasons,)
+        role = str(body.get("contact_role") or body.get("contact_title") or "").lower()
+        if (body.get("board_sponsor", body.get("has_sponsor")) or "senior_buyer" in mkt_reasons
+                or any(t in role for t in SENIOR_ROLE_MARKERS)):
             score += 25
             reasons.append("board_sponsor")
-        if body.get("pain") or body.get("need"):
+        if body.get("pain") or body.get("need") or "named_pain_point" in mkt_reasons:
             score += 15
             reasons.append("defined_pain")
         if body.get("budget_confirmed"):
@@ -351,7 +371,8 @@ class SalesAgent(DepartmentAgent):
         score, reasons = self._score_lead(b)
         employees = int(_num(b.get("employees")))
         in_size = ICP_MIN_EMPLOYEES <= employees <= ICP_MAX_EMPLOYEES
-        if str(b.get("region", "UK")).upper() == "US" and self.clock.date.year < US_LAUNCH_YEAR:
+        if str(b.get("country") or b.get("region") or "UK").upper() in ("US", "USA") \
+                and self.clock.date.year < US_LAUNCH_YEAR:
             self._note("lead_parked", f"{lead_id} {company}: US lead before US launch", lead_id=lead_id)
             return []
         if not in_size or score < 60:
