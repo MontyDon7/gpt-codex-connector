@@ -130,6 +130,7 @@ CERT_PLAN: dict[str, dict[str, Any]] = {
         ("SOC 2 Type II report issued", date(2027, 8, 16), 90.0)]},
 }
 MILESTONE_SLIP_DAYS = 30
+READINESS_PLAN_MARGIN = 10.0   # readiness on plan exceeds each milestone's required level by this many points
 
 # Planned and capacity-triggered hires (blueprint.md section 5): key, role, level, start date, time to fill (days)
 PLANNED_HIRES = (
@@ -271,8 +272,9 @@ class ItSecurityAgent(DepartmentAgent):
         for name, plan in CERT_PLAN.items():
             certs[name] = {
                 "status": "planned", "start_day": self.clock.day_of(plan["start"]),
-                "milestones": [{"name": n, "planned_day": self.clock.day_of(d), "required": r, "done_day": None,
-                                "missed": False} for n, d, r in plan["milestones"]],
+                "milestones": [{"name": n, "planned_day": self.clock.day_of(d), "plan_day": self.clock.day_of(d),
+                                "required": r, "done_day": None, "missed": False}
+                               for n, d, r in plan["milestones"]],
                 "readiness": 0.0, "reported_status": None,
             }
         return certs
@@ -1051,13 +1053,35 @@ class ItSecurityAgent(DepartmentAgent):
     def _open_ncs(self) -> int:
         return sum(1 for n in self.state["nonconformities"] if n["close_day"] > self.clock.day)
 
+    @staticmethod
+    def _is_audit(name: str) -> bool:
+        return any(k in name.lower() for k in ("audit", "verification"))
+
+    def _readiness_ramp(self, c: dict) -> float:
+        """Readiness with controls on plan: starts at 25 and passes through each milestone's required level
+        plus READINESS_PLAN_MARGIN at its ORIGINAL planned date (piecewise linear), so a plan that is on track
+        can meet its own milestones; hygiene penalties then pull readiness below the ramp."""
+        knots = [(c["start_day"], 25.0)]
+        for m in c["milestones"]:
+            audit = self._is_audit(m["name"])
+            # an audit must not be 'at risk' eight weeks out (SOP-09), so the ramp reaches the alert level by then
+            x = m["plan_day"] - (READINESS_ALERT_DAYS if audit else 0)
+            y = min(100.0, max(m["required"] + READINESS_PLAN_MARGIN, READINESS_ALERT_PCT if audit else 0.0))
+            if x > knots[-1][0]:
+                knots.append((x, max(knots[-1][1], y)))
+        day = self.clock.day
+        if day >= knots[-1][0]:
+            return knots[-1][1]
+        for (x0, y0), (x1, y1) in zip(knots, knots[1:]):
+            if day <= x1:
+                return y0 + (y1 - y0) * (day - x0) / max(1, x1 - x0)
+        return knots[-1][1]
+
     def _readiness(self, name: str) -> float:
         c = self.state["certs"][name]
         if self.clock.day < c["start_day"]:
             return 0.0
-        last = c["milestones"][-1]["planned_day"]
-        progress = (self.clock.day - c["start_day"]) / max(1, last - c["start_day"])
-        base = min(100.0, 25.0 + 100.0 * progress)
+        base = self._readiness_ramp(c)
         late_vulns = sum(1 for v in self._open_crit_high() if self.clock.day > v["due_day"])
         penalty = min(12, 3 * late_vulns) + min(10, 2 * self._open_ncs())
         training = [t["rate"] for t in self.state["training"].values()]
@@ -1077,9 +1101,10 @@ class ItSecurityAgent(DepartmentAgent):
         if day < c["start_day"]:
             return "planned"
         left = nxt["planned_day"] - day
-        if nxt["missed"] or (left <= READINESS_ALERT_DAYS and c["readiness"] < READINESS_ALERT_PCT):
+        if nxt["missed"] or (self._is_audit(nxt["name"]) and left <= READINESS_ALERT_DAYS
+                             and c["readiness"] < READINESS_ALERT_PCT):
             return "at_risk"
-        if left <= 60 and any(k in nxt["name"].lower() for k in ("audit", "verification")):
+        if left <= 60 and self._is_audit(nxt["name"]):
             return "audit_scheduled"
         return "in_progress"
 
