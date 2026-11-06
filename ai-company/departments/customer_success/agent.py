@@ -526,18 +526,21 @@ class CustomerSuccessAgent(DepartmentAgent):
             category = "promoter" if score >= 9 else "passive" if score >= 7 else "detractor"
             c["components"]["sentiment"] = _clamp(score * 10.0)
             if category == "detractor":
+                self._note_negative(c, "detractor", "detractor NPS")
                 self.create_task(f"Close the loop with {c['client_name']} detractor within 2 business days", 2, "high")
         elif kind == "csat" and score is not None:
             score = max(1, min(5, int(score)))
             c["csat_last"] = score
             c["components"]["sentiment"] = _clamp((score - 1) * 25.0)
         elif kind == "complaint":
+            self._note_negative(c, "complaint", "client complaint")
             self._adjust(c, sentiment=-20.0)
             self.create_task(f"Respond to complaint from {c['client_name']} within 1 business day", 1, "high")
         elif kind == "praise":
             self._adjust(c, sentiment=+10.0)
         theme = self.ask_llm(f"Summarise this client feedback in eight words: {b.get('text', '')}")
         out.extend(self._rescore(c, f"feedback {category}"))
+        out.extend(self._check_signals(c))
         out.append(self.emit("customer_success.feedback_received", {
             "client_id": c["client_id"], "client_name": c["client_name"], "kind": kind, "score": score,
             "category": category, "severity": b.get("severity", "low"), "theme": theme,
@@ -568,7 +571,10 @@ class CustomerSuccessAgent(DepartmentAgent):
         self._adjust(c, support=-SUPPORT_HIT[sev])
         self.log_event("customer_success.activity.ticket_triaged", ticket, client_id=c["client_id"], priority=prio,
                        sla_response_hours=response_h, sla_resolution_hours=resolve_h, keep_tier=tier)
+        if SEVERITY_RANK[sev] >= 3:
+            self._note_negative(c, "severe_ticket", f"{prio} support ticket")
         out = self._rescore(c, f"{prio} support ticket")
+        out.extend(self._check_signals(c))
         if SEVERITY_RANK[sev] >= 3:
             out.append(self.emit("customer_success.support_escalated", {
                 "client_id": c["client_id"], "client_name": c["client_name"], "ticket_id": ticket,

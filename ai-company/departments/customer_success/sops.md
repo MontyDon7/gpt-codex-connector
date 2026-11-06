@@ -100,6 +100,8 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 | Save rule (agent model of CCO judgement) | reason saveable, health before the notice at least 55, and no open dispute | Department assumption |
 | Save deadline | half the notice period, minimum 1 and maximum 14 days after the notice | Department assumption |
 | Churn post-mortem | 21 days (15 business days) after `customer_success.client_churned` | Department assumption |
+| Compound churn-risk signal window | 30 days (`SIGNAL_WINDOW_DAYS`) | Department assumption |
+| Compound churn-risk signals needed to flag | 2 distinct signals in the window (`SIGNAL_MIN_COUNT`) | Department assumption |
 | Clients per named client manager | 22 | economics.md section 4 |
 | Reference eligibility | green band, last NPS 9 or above, no dispute, not churned, completed engagement or live Keep contract | Department assumption |
 | Collections ladder (Finance owns) | reminder day 31, call day 38, finance-head escalation day 45, legal letter day 60 | COMPANY.md §7 |
@@ -298,6 +300,7 @@ Clocks run on business hours (10-hour day), except Enterprise P1 and P2 which ru
 ### Steps
 
 1. [agent] When a client is red, set severity critical if the score is under 35, otherwise high. If a risk is already open at the same or higher severity, do nothing; a higher severity re-flags.
+   Compound signals: a client that is not yet red is also flagged (severity high) when two distinct negative signals land inside 30 days. The signals are a detractor NPS (0 to 6), a client complaint and a high or critical support ticket; repeats of the same signal do not count twice. The flag reason lists the signals. The same signals keep an open flag from clearing while two or more are still inside the window.
 2. [agent] Open the risk, create a save-plan task (due in 2 days; critical for critical severity, high otherwise) and publish `customer_success.churn_risk_flagged` with the recommended action: executive sponsor call within 2 business days; save plan owned by the CCO.
 3. [human] Chief Customer Officer calls the executive sponsor within 2 business days, agrees the root cause with the client and names a save owner inside Lumenhall (Delivery Principal, Managing Partner or CEO for the largest accounts).
 4. [human] Within 5 business days the save plan is written: what will change, by when, who is accountable, what the client will see, and how health will be re-measured. It is shared with Delivery and Sales.
