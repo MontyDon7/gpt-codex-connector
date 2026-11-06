@@ -423,6 +423,7 @@ class BehaviourTests(unittest.TestCase):
         topics = self._topics(company)
         self.assertIn("it_security.incident_resolved", topics)
         self.assertNotIn("it_security.data_breach_confirmed", topics)
+        agent.kpi_snapshot()   # KPI actuals are rolled up on snapshot / month end
         self.assertLessEqual(agent.kpis["mttr_critical_incident_hours"].actual, 8.0)
 
     def test_breach_without_filing_escalates_then_closes(self) -> None:
@@ -504,7 +505,8 @@ class BehaviourTests(unittest.TestCase):
         self.assertEqual(done["DL-0014"]["completed_day"], 3)
         self.assertEqual(done["DL-0014"]["outcome"], "passed_with_conditions")   # ISO 27001 not yet certified
         self.assertEqual(done["DL-0014"]["certificates_provided"], [])
-        self.assertEqual(done["DL-0015"]["completed_day"], 2 + 4)
+        # bespoke questionnaires take 4 BUSINESS days (sops.md): day 2 is a Wednesday, so Tuesday = day 8
+        self.assertEqual(done["DL-0015"]["completed_day"], 8)
         self.assertLessEqual(agent.kpis["security_questionnaire_turnaround_days"].actual, 5)
 
     def test_small_standard_questionnaire_needs_no_ciso_signoff(self) -> None:
