@@ -416,6 +416,21 @@ class BehaviourTests(unittest.TestCase):
         self.assertEqual(agent.state["incidents"]["INC-0001"]["status"], "resolved")
         self.assertEqual(agent.state["ico_late"], 0)
 
+    def test_critical_alert_does_not_loop_with_executive_crisis(self) -> None:
+        """Regression (full-company simulation): Executive declares a crisis on a critical incident; IT/Security
+        must link that crisis to the incident instead of opening a new incident each time."""
+        from core import Company, MockLLM
+        co = Company(llm=MockLLM(), strict=True)
+        co.inject("external.security_alert", {"alert_id": "AL-1", "severity": "critical",
+                                              "personal_data_involved": True, "summary": "bulk export"},
+                  delay_days=5)
+        co.run(40)
+        topics = [m.topic for m in co.bus.history]
+        self.assertEqual(topics.count("it_security.incident_detected"), 1)
+        self.assertEqual(topics.count("executive.crisis_declared"), 1)
+        self.assertEqual(topics.count("it_security.data_breach_confirmed"), 1)
+        self.assertEqual(len(co.agents["it_security"].state["incidents"]), 1)
+
     def test_non_personal_data_incident_resolves_without_breach(self) -> None:
         company, agent = self._run("external.security_alert", {
             "severity": "high", "summary": "malware on managed laptop", "asset": "lt-1", "category": "malware",

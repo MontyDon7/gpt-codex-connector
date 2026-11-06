@@ -604,7 +604,23 @@ class ItSecurityAgent(DepartmentAgent):
             self._task(title, self.clock.day + due, "critical")
         s["crisis_log"].append(f"day {self.clock.day}: crisis declared: {summary}")
         out: list[Message] = []
-        if security:
+        # A crisis declared in response to a security incident we already hold (Executive declares one when it sees a
+        # critical incident_detected) is linked to that incident. Opening a fresh incident here would make Executive
+        # declare another crisis, and so on every tick (feedback loop found in the full-company simulation).
+        linked = s["incidents"].get(_s(body.get("incident_id")))
+        if linked is None and security:
+            current = s["incidents"].get(s["crisis_incident"]) if s["crisis_incident"] else None
+            if current is not None and current["status"] == "open":
+                linked = current
+            else:
+                open_serious = [i for i in s["incidents"].values()
+                                if i["status"] == "open" and i["severity"] in ("high", "critical")]
+                linked = open_serious[-1] if open_serious else None
+        if security and linked is not None:
+            linked["crisis"], s["crisis_incident"] = True, linked["id"]
+            self.log_event("it_security.activity.crisis_linked_to_incident",
+                           f"crisis linked to existing incident {linked['id']}", incident_id=linked["id"])
+        elif security:
             inc = self._new_incident(sev if sev in ("high", "critical") else "critical", summary,
                                      dict(body, category="crisis"), "crisis")
             inc["crisis"], s["crisis_incident"] = True, inc["id"]
