@@ -51,6 +51,7 @@ TECH_TRIAGE_DAYS = 2                            # business days
 RISK_REVIEW_REQUEST_DAYS = 2                    # business days from identifying a trigger
 RISK_REVIEW_LEGAL_TARGET_DAYS = 5               # Legal's target; escalate to the CEO at 8
 RISK_REVIEW_ESCALATE_DAYS = 8
+AI_SIGNOFF_DAYS = 3                             # Legal's General Counsel sign-off on a pending recommendation
 RISK_TRIGGERS = {
     "RT-1": "new or widened tool or action permission for a client-facing agent",
     "RT-2": "change of foundation model family, provider or major version in a client-facing agent",
@@ -668,11 +669,21 @@ class ProductAgent(DepartmentAgent):
                        "register", self._bday_offset(2), "medium")
             return []
         rec["risk_tier"], rec["recommendation"], rec["outcome"] = tier, raw, outcome
+        status_text = _s(body.get("status")).lower()
+        pending = "pending" in status_text or _bool(body.get("pending")) or _bool(body.get("pending_gc_signoff"))
         agent = _s(body.get("agent_name"), rec["agent_name"])
         self.state["agent_register"][agent] = {"review_id": review_id, "tier": tier, "outcome": outcome,
                                                "conditions": len(conditions), "day": self.clock.day}
         out: list[Message] = []
-        if outcome == "cleared":
+        if pending and outcome in ("cleared", "conditions"):
+            # Legal's recommendation is provisional until the General Counsel signs off (about 3 days later):
+            # it is not clearance, so the release hold stays in place.
+            rec["status"], rec["lift_day"] = "awaiting_signoff", self.clock.day + AI_SIGNOFF_DAYS
+            rec["conditions"] = list(conditions)
+            rec["dpia_required"] = _bool(body.get("dpia_required"))
+            self._task(f"{review_id}: Legal recommendation '{raw}' is pending General Counsel sign-off; hold stays "
+                       "until sign-off and every condition is evidenced", self._bday_offset(AI_SIGNOFF_DAYS), "high")
+        elif outcome == "cleared":
             rec["status"], rec["lift_day"] = "cleared", self.clock.day
             out += self._lift_hold(review_id)
         elif outcome == "conditions":
@@ -1018,6 +1029,15 @@ class ProductAgent(DepartmentAgent):
         exploited = _bool(body.get("exploited_in_wild"))
         sla = VULN_EXPLOITED_SLA_DAYS if (exploited and sev in ("critical", "high")) or (
             exploited and sev == "critical") else VULN_SLA_DAYS[sev]
+        prior = self.state["vulns"].get(vid)
+        if _bool(body.get("reopened")) and prior and prior["status"] == "fixed":
+            # failed re-scan: the finding counts as late (kpis.md) and goes back to the hotfix path
+            if prior.get("on_time"):
+                self.state["vuln_on_time"] -= 1
+                self.state["vuln_fixed"] -= 1
+            prior.update(status="planned", route="hotfix", fix_day=self.clock.day + 1, on_time=False, reopened=True)
+            self._task(f"vuln/{vid}: fix failed re-scan; rework within 1 business day", 1, "high")
+            return []
         it_due = _num(body.get("due_day"), self.clock.day + sla)
         if body.get("due_day") is None and exploited:
             it_due = self.clock.day + VULN_EXPLOITED_SLA_DAYS
@@ -1042,7 +1062,8 @@ class ProductAgent(DepartmentAgent):
 
     def _complete_fix(self, vuln: dict, release_id: str) -> Message:
         vuln["status"], vuln["fixed_day"] = "fixed", self.clock.day
-        on_time = self.clock.day <= vuln["internal_due_day"]
+        on_time = self.clock.day <= vuln["internal_due_day"] and not vuln.get("reopened")
+        vuln["on_time"] = on_time
         self.state["vuln_fixed"] += 1
         self.state["vuln_on_time"] += 1 if on_time else 0
         if not on_time:
@@ -1389,6 +1410,20 @@ class ProductAgent(DepartmentAgent):
         out: list[Message] = []
         for rid in sorted(self.state["reviews"]):
             rec = self.state["reviews"][rid]
+            if rec["status"] == "awaiting_signoff" and rec["lift_day"] is not None and \
+                    self.clock.day >= rec["lift_day"]:
+                self.log_event("product.activity.review_signoff_assumed", rid)
+                conds = rec.get("conditions") or []
+                if rec["outcome"] == "conditions" or conds:
+                    rec["status"] = "conditions_pending"
+                    rec["lift_day"] = self.clock.day + 3 * max(1, len(conds)) + (7 if rec.get("dpia_required") else 0)
+                    for n, cond in enumerate(conds or ["standard conditions"], start=1):
+                        self._task(f"{rid}/{n}: evidence condition '{_s(cond)[:100]}' before go-live",
+                                   self._bday_offset(5), "high")
+                else:
+                    rec["status"] = "cleared"
+                    out += self._lift_hold(rid)
+                continue
             if rec["status"] == "conditions_pending" and rec["lift_day"] is not None and \
                     self.clock.day >= rec["lift_day"]:
                 rec["status"] = "cleared"
