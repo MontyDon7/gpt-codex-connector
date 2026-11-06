@@ -9,6 +9,9 @@ this module implements (SOP-CUSTOMER_SUCCESS-01 to -14).
 from __future__ import annotations
 
 import math
+import statistics
+from dataclasses import replace
+from datetime import timedelta
 from typing import Callable, Optional
 
 from core import DepartmentAgent, Kpi, Message, Role, publishes_for, subscribes_for
@@ -24,8 +27,8 @@ KPIS: list[Kpi] = [
     Kpi("csat", "percent", 90.0, None),
     Kpi("avg_health_score", "points", 72.0, None),
     Kpi("green_client_share", "percent", 60.0, None),
-    Kpi("keep_attach_forge_build_scale", "percent", 75.0, None),     # COMPANY.md §2 land and expand
-    Kpi("keep_attach_compass_programme", "percent", 40.0, None),     # COMPANY.md §2 (>=40%)
+    Kpi("keep_attach_forge_build_scale", "percent", 75.0, None),     # realised rate; COMPANY.md §2 policy is 100%
+    Kpi("keep_attach_compass_programme", "percent", 40.0, None),     # COMPANY.md §2 minimum (>=40%)
     Kpi("support_first_response_sla", "percent", 95.0, None),
     Kpi("at_risk_save_rate", "percent", 40.0, None),
     Kpi("qbr_completion_rate", "percent", 90.0, None),
@@ -47,10 +50,15 @@ PRICES_GBP: dict[str, int] = {
     "compass_spark": 45000, "compass_sprint": 120000, "compass_programme": 350000,
     "forge_pilot": 90000, "forge_build": 260000, "forge_scale": 650000,
 }
-# COMPANY.md §2 land and expand: Keep on every Forge Build/Scale and >=40% of Compass Programmes
+# COMPANY.md §2 land and expand: Keep attaches to every Forge Build/Scale and >=40% of Compass Programmes.
 KEEP_ATTACH: dict[str, str] = {
     "forge_build": "keep_plus", "forge_scale": "keep_enterprise", "compass_programme": "keep_essential",
 }
+# Policy floor, percent of completed engagements that must receive a Keep proposal at closeout (offer rate).
+# The KPIs keep_attach_* measure the realised signed rate, a ramp (75 / 85 / 90 for Build and Scale) towards the
+# 100% policy because a client may decline (sops.md, SOP-CUSTOMER_SUCCESS-08).
+KEEP_ATTACH_POLICY_PCT: dict[str, float] = {"forge_build": 100.0, "forge_scale": 100.0, "compass_programme": 40.0}
+ATTACH_WINDOW_DAYS = 365          # signed Keep contract within 12 months of completion counts as attached
 # COMPANY.md §10 journey: Spark -> Pilot -> Build -> Keep Plus
 UPSELL_PATH: dict[str, str] = {
     "compass_spark": "forge_pilot", "compass_sprint": "forge_pilot", "forge_pilot": "forge_build",
@@ -62,6 +70,18 @@ RENEWAL_LEAD_DAYS = 90            # renewal_due is emitted 90 days before term e
 CLIENT_DECISION_WINDOW_DAYS = 14  # days between renewal proposal and client decision in the model
 CLIENTS_PER_NAMED_CSM = 22        # coverage ceiling that triggers a hire request (economics.md section 3)
 POST_MORTEM_DAYS = 21             # 15 business days
+HANDOVER_TARGET_DAYS = 15         # contract signature to accepted handover (kpis.md onboarding_handover_days FY2026)
+MIGRATED_CONTRACT_DAYS = 30       # a contract whose start day is >30 days before signature carries no onboarding clock
+SIGNAL_WINDOW_DAYS = 30           # compound churn-risk signal window (sops.md shared constants)
+SIGNAL_MIN_COUNT = 2              # distinct negative signals inside the window that flag churn risk
+ENTERPRISE_NPS_FLAG_MAX = 3       # NPS 0 to 3 from a Keep Enterprise sponsor flags churn risk
+CANCEL_KEYWORDS = ("cancel", "terminate", "not renew", "switch provider", "leave you", "end the contract")
+SLA_BREACH_SUPPORT_HIT = 10.0     # support component reduction for each recorded SLA breach
+TICKETS_MONTH_FIRST_SPECIALIST = 30
+LIVE_KEEP_FIRST_SPECIALIST = 8
+TICKETS_MONTH_THIRD_SPECIALIST = 150
+SLA_HIRE_FLOOR_PCT = 95.0         # first-response SLA below this for two months raises a specialist request
+RENEWALS_FOR_MANAGER = 30         # Keep renewals in the next 12 months
 
 # COMPANY.md §5.4 department envelopes, GBP (people, non_people) by fiscal year
 BUDGET_GBP: dict[int, tuple[int, int]] = {
@@ -69,6 +89,15 @@ BUDGET_GBP: dict[int, tuple[int, int]] = {
 }
 # COMPANY.md §6.1 year-end humans and agents by fiscal year
 HEADCOUNT: dict[int, tuple[int, int]] = {2026: (1, 1), 2027: (6, 5), 2028: (14, 12)}
+# Planned year-end humans by hireable role (blueprint.md section 3; the CCO is the first named client manager and is
+# not in this table). A request that takes a role above its plan is outside the approved headcount plan.
+ROLE_PLAN: dict[str, dict[int, int]] = {
+    "Customer Success Manager": {2026: 0, 2027: 2, 2028: 6},
+    "Client Support Specialist": {2026: 0, 2027: 2, 2028: 3},
+    "Renewals and Commercial Manager": {2026: 0, 2027: 0, 2028: 1},
+}
+ROLE_LEVEL: dict[str, str] = {"Customer Success Manager": "manager", "Client Support Specialist": "consultant",
+                              "Renewals and Commercial Manager": "manager"}
 
 # ---------------------------------------------------------------------------------------------
 # Health score model (SOP-CUSTOMER_SUCCESS-02)
@@ -152,6 +181,7 @@ class CustomerSuccessAgent(DepartmentAgent):
             "executive.crisis_declared": self._on_crisis,
             "customer_success.internal.renewal_decision": self._on_renewal_decision,
             "customer_success.internal.save_deadline": self._on_save_deadline,
+            "customer_success.internal.sla_check": self._on_sla_check,
         }
 
     # contract -----------------------------------------------------------------------------
@@ -217,7 +247,9 @@ class CustomerSuccessAgent(DepartmentAgent):
                 "risk_severity": None, "dispute": False, "keep": None, "last_touch_day": self.clock.day,
                 "nps_last": None, "csat_last": None, "overdue": {}, "invoices": {}, "case_study_consent": False,
                 "expansion_flags": [], "engagement_completed": False, "pre_notice_health": None,
-                "open_incidents": [], "qbr_quarters": [],
+                "open_incidents": [], "qbr_quarters": [], "negatives": {}, "flag_days": [], "churn_day": None,
+                "contract_signed_day": None, "handover_pending": False, "handover_done_day": None,
+                "handover_flagged": False,
             }
             self.log_event("customer_success.activity.client_record_opened", cid, client_id=cid)
         client = self.clients[cid]
@@ -246,7 +278,7 @@ class CustomerSuccessAgent(DepartmentAgent):
             }))
         if band == "red":
             out.extend(self._flag_risk(c, "critical" if score < 35.0 else "high", reason))
-        elif c["risk_open"] and score >= CLEAR_RISK_MIN and not c["dispute"]:
+        elif c["risk_open"] and score >= CLEAR_RISK_MIN and not c["dispute"] and not self._active_signals(c):
             c["risk_open"], c["risk_severity"] = False, None
             self.log_event("customer_success.activity.risk_cleared", c["client_id"], client_id=c["client_id"],
                            health_score=score)
@@ -257,6 +289,8 @@ class CustomerSuccessAgent(DepartmentAgent):
             return []
         if c["risk_open"] and SEVERITY_RANK[severity] <= SEVERITY_RANK[c["risk_severity"] or "low"]:
             return []
+        if not c["risk_open"]:
+            c["flag_days"].append(self.clock.day)
         c["risk_open"], c["risk_severity"] = True, severity
         self.create_task(f"Save plan for {c['client_name']} ({c['client_id']}): {reason}", 2,
                          "critical" if severity == "critical" else "high")
@@ -270,6 +304,27 @@ class CustomerSuccessAgent(DepartmentAgent):
 
     def _touch(self, c: dict) -> None:
         c["last_touch_day"] = self.clock.day
+
+    # compound churn-risk signals (SOP-CUSTOMER_SUCCESS-06) -------------------------------------
+    def _note_negative(self, c: dict, key: str, kind: str) -> None:
+        entry = c["negatives"].get(key)
+        if entry is None:
+            c["negatives"][key] = {"day": self.clock.day, "kind": kind}
+        elif kind not in entry["kind"]:
+            entry["kind"] = f"{entry['kind']} + {kind}"
+
+    def _active_signals(self, c: dict) -> list[str]:
+        """Kinds of negative signals inside the window, only when there are at least SIGNAL_MIN_COUNT distinct ones."""
+        live = [e["kind"] for k, e in sorted(c["negatives"].items())
+                if self.clock.day - e["day"] <= SIGNAL_WINDOW_DAYS]
+        return live if len(live) >= SIGNAL_MIN_COUNT else []
+
+    def _check_signals(self, c: dict) -> list[Message]:
+        live = self._active_signals(c)
+        if not live:
+            return []
+        return self._flag_risk(c, "high", f"compound client signals in {SIGNAL_WINDOW_DAYS} days: "
+                                         + "; ".join(live))
 
     def _keep_tier(self, c: dict) -> str:
         return (c["keep"] or {}).get("tier") or "keep_essential"

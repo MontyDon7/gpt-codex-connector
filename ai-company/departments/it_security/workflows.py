@@ -151,7 +151,7 @@ def scenario_compliance_and_budget_cycle(bus: MessageBus, clock: SimClock, **par
     Expected chain: legal.regulatory_change_noted, legal.policy_update_published, people.compliance_training_completed
     and operations.continuity_test_completed feed the certification evidence (monthly
     it_security.certification_status_updated to legal, sales, executive); finance.budget_cycle_opened ->
-    it_security.budget_submitted (460,000 FY2026 envelope shape: FY2027 is 920,000); executive.budget_approved.
+    it_security.budget_submitted (FY2027 envelope 920,000, COMPANY.md section 5.4); executive.budget_approved.
     """
     d = clock.day
     return [
